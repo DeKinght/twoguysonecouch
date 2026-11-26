@@ -19,6 +19,15 @@ func _ready() -> void:
 	_bind_event("grab", click)
 
 
+## F11 przełącza pełny ekran / okno (przydatne przy testach dwóch instancji na jednym PC).
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F11:
+		var fullscreen: bool = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		DisplayServer.window_set_mode(
+			DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 func _bind_key(action: StringName, keycode: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = keycode
