@@ -9,6 +9,7 @@ const FEED_SECONDS: float = 8.0
 var _prompt: Label
 var _feed: Label
 var _total: Label
+var _job: Label
 ## Wpisy listy szkód: {text: String, expire: float}
 var _feed_entries: Array[Dictionary] = []
 
@@ -36,6 +37,13 @@ func _ready() -> void:
 	_total.position = Vector2(16, 12)
 	add_child(_total)
 
+	_job = Label.new()
+	_job.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_job.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_job.offset_top = 12.0
+	_job.add_theme_font_size_override("font_size", 22)
+	add_child(_job)
+
 	var help := Label.new()
 	help.text = "LPM: złap | B: popchnij gracza | Shift: sprint | Ctrl: kucnij"
 	help.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -50,6 +58,16 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_refresh_prompt()
 	_refresh_feed()
+	_refresh_job()
+
+
+func _refresh_job() -> void:
+	var job := get_tree().get_first_node_in_group("job") as JobManager
+	if job == null:
+		_job.text = ""
+		return
+	var seconds: int = ceili(job.time_left)
+	_job.text = "Czas: %d:%02d   |   W busie: %d / %d" % [seconds / 60, seconds % 60, job.loaded_count, job.total_count]
 
 
 func _on_damage(peer_id: int, item_name: String, loss: int) -> void:

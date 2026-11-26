@@ -9,6 +9,7 @@ var _main_box: VBoxContainer
 var _lobby_box: VBoxContainer
 var _players_label: Label
 var _start_button: Button
+var _level_select: OptionButton
 var _wait_label: Label
 
 
@@ -44,6 +45,11 @@ func _ready() -> void:
 
 	_status.text = Net.status_message
 	Net.status_message = ""
+	Net.input_locked = false
+
+	# Powrót z gry: połączenie nadal trwa, więc od razu pokazujemy lobby.
+	if not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
+		_show_lobby()
 
 
 func _build_main_box(parent: Control) -> void:
@@ -84,6 +90,14 @@ func _build_lobby_box(parent: Control) -> void:
 
 	_players_label = Label.new()
 	_lobby_box.add_child(_players_label)
+
+	_level_select = OptionButton.new()
+	for level_name: String in Net.LEVELS:
+		_level_select.add_item("Mapa: " + level_name)
+	_level_select.selected = maxi(0, Net.LEVELS.values().find(Net.level_scene))
+	_level_select.item_selected.connect(
+		func(index: int) -> void: Net.level_scene = Net.LEVELS.values()[index])
+	_lobby_box.add_child(_level_select)
 
 	_start_button = Button.new()
 	_start_button.text = "Start"
@@ -150,4 +164,5 @@ func _refresh_lobby() -> void:
 	_players_label.text = "\n".join(lines)
 	var is_host: bool = multiplayer.is_server()
 	_start_button.visible = is_host
+	_level_select.visible = is_host
 	_wait_label.visible = not is_host

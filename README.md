@@ -25,6 +25,6 @@ ui/hud.gd                 Celownik i podpowiedź
 WASD, Shift sprint, Spacja skok, Ctrl/C kucanie, LPM (trzymaj) chwyt, kółko myszy odległość, Esc zwalnia mysz.
 
 ## Mapa i modele
-Gra startuje na `house.tscn` (zmiana w `Net.LEVEL_SCENE`). Mebel do noszenia: wstaw `grabbable.tscn`,
+Host wybiera mapę w lobby (lista `Net.LEVELS`: Blok albo Dom). Mebel do noszenia: wstaw `grabbable.tscn`,
 ustaw `model` (plik .glb z `assets/models/furniture/`), `item_name`, `mass`, `value`. Modele Kenney
 mają skalę ~1:2, stąd domyślne `model_scale = 2`.

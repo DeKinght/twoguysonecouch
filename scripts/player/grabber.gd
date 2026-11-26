@@ -57,6 +57,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if Net.input_locked:
+		release()
+		return
 	var player := owner as Player
 	if player != null and player.is_down():
 		return  # leżący gracz niczego nie łapie (przewrócenie samo puszcza przedmiot)

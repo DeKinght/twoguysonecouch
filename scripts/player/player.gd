@@ -104,6 +104,8 @@ func is_down() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Net.input_locked:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if _down_timer > 0.0:
 			return
@@ -125,7 +127,8 @@ func _physics_process(delta: float) -> void:
 	_read_input()
 	_update_down(delta)
 	_shove_cd = maxf(0.0, _shove_cd - delta)
-	if Input.is_action_just_pressed("shove") and _down_timer <= 0.0 and _shove_cd <= 0.0:
+	if Input.is_action_just_pressed("shove") and _down_timer <= 0.0 and _shove_cd <= 0.0 \
+			and not Net.input_locked:
 		_try_shove()
 
 	_update_crouch(delta)
@@ -165,7 +168,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _read_input() -> void:
-	if _down_timer > 0.0:
+	if _down_timer > 0.0 or Net.input_locked:
 		_move_input = Vector2.ZERO
 		_jump_pressed = false
 		_sprint_held = false

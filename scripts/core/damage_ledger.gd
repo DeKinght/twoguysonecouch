@@ -45,6 +45,23 @@ func totals_by_peer() -> Dictionary:
 	return totals
 
 
+## Wpisy zgrupowane po (gracz, przedmiot): {peer, item, hits, loss}, najdroższe pierwsze.
+func breakdown() -> Array[Dictionary]:
+	var grouped: Dictionary = {}
+	for r in records:
+		var key: String = "%d|%s" % [r["peer"], r["item"]]
+		if not grouped.has(key):
+			grouped[key] = {"peer": r["peer"], "item": r["item"], "hits": 0, "loss": 0}
+		var g: Dictionary = grouped[key]
+		g["hits"] = int(g["hits"]) + 1
+		g["loss"] = int(g["loss"]) + int(r["loss"])
+	var out: Array[Dictionary] = []
+	for g in grouped.values():
+		out.append(g)
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["loss"] > b["loss"])
+	return out
+
+
 func display_name(peer_id: int) -> String:
 	if peer_id == 0:
 		return "Wypadek"
