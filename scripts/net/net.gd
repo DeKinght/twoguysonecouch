@@ -110,6 +110,7 @@ func _rpc_load_level() -> void:
 	game_started = true
 	ready_peers.clear()
 	_all_ready_emitted = false
+	Ledger.reset()
 	get_tree().change_scene_to_file(LEVEL_SCENE)
 
 

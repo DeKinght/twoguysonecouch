@@ -12,6 +12,7 @@ func _ready() -> void:
 	_bind_key("sprint", KEY_SHIFT)
 	_bind_key("crouch", KEY_CTRL)
 	_bind_key("crouch", KEY_C)
+	_bind_key("shove", KEY_B)
 
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT

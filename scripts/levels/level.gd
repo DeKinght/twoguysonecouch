@@ -14,6 +14,7 @@ func _ready() -> void:
 	spawner.spawn_function = _spawn_player
 
 	if multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
+		Ledger.reset()
 		players_root.add_child(_spawn_player({"id": 1, "pos": _spawn_pos(0)}))
 		return
 

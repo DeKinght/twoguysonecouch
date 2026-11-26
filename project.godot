@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 InputSetup="*res://scripts/core/input_setup.gd"
 Net="*res://scripts/net/net.gd"
+Ledger="*res://scripts/core/damage_ledger.gd"
 
 [display]
 

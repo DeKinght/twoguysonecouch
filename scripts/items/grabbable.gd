@@ -9,19 +9,40 @@ extends RigidBody3D
 ## CHWYT: gracz (Grabber) woła request_* - na hoście wykonują się od razu,
 ## na kliencie idą RPC do hosta. Host co klatkę fizyki liczy siłę sprężyny
 ## dla każdego trzymającego (parametry bierze ze swojej kopii postaci tego gracza).
+##
+## SZKODY (tylko host): w _integrate_forces mierzymy zmianę prędkości przy
+## kontakcie (impuls / masa). Powyżej progu odejmujemy wartość i zapisujemy
+## winowajcę (kto trzymał) w Ledgerze.
 
 @export var item_name: String = "Karton"
 @export var size: Vector3 = Vector3(0.5, 0.5, 0.5)
 @export var color: Color = Color(0.72, 0.55, 0.35)
-## Wartość w zł - w etapie 3 będzie spadać przy uderzeniach.
+## Napis na ściankach (np. "SZKŁO"). Puste = brak.
+@export var label_text: String = ""
+
+@export_group("Szkody")
+## Wartość w zł - spada przy uderzeniach.
 @export var value: float = 100.0
-## Wytrzymałość - w etapie 3 określa odporność na uderzenia.
+## Wytrzymałość: im niższa, tym większe szkody od tego samego uderzenia (100 = norma).
 @export var durability: float = 100.0
+## Zmiana prędkości [m/s] przy kontakcie, poniżej której nic się nie dzieje.
+@export var hit_speed_threshold: float = 2.5
+## Ile zł strat na każdy m/s ponad próg (przy durability = 100).
+@export var damage_scale: float = 6.0
+
+@export_group("Przewracanie graczy")
+## Przedmiot uderzający gracza musi lecieć szybciej niż to [m/s]...
+@export var knock_speed: float = 3.0
+## ...i mieć pęd (masa * prędkość) większy niż to.
+@export var knock_momentum: float = 30.0
 
 ## Ile sekund bez aktualizacji od klienta, zanim host uzna chwyt za zerwany.
 const HOLD_TIMEOUT: float = 0.6
 const NET_SMOOTHING: float = 18.0
 const MAX_PUSH_IMPULSE: float = 5.0
+const HIT_COOLDOWN: float = 0.25
+## Przez ile sekund po puszczeniu przedmiotu szkody nadal liczą się trzymającemu.
+const BLAME_WINDOW: float = 3.0
 
 ## Replikowane z hosta do klientów:
 var net_position: Vector3
@@ -30,11 +51,18 @@ var holder_count: int = 0
 
 ## Tylko host: peer_id -> {point: Vector3, target: Vector3, stamp: float}
 var holders: Dictionary = {}
-## peer_id ostatniego trzymającego (do rozliczenia szkód per gracz w etapie 3).
+## peer_id ostatniego trzymającego (do rozliczenia szkód per gracz).
 var last_holder_id: int = 0
 
 var net_sync: MultiplayerSynchronizer
+
 var _base_angular_damp: float
+var _max_value: float
+var _shown_value: float = -1.0
+var _material: StandardMaterial3D
+var _prev_velocity: Vector3 = Vector3.ZERO
+var _last_hit_time: float = -10.0
+var _last_release_time: float = -10.0
 
 
 func _ready() -> void:
@@ -42,7 +70,10 @@ func _ready() -> void:
 	collision_layer = 4  # items
 	collision_mask = 7   # world + players + items
 	continuous_cd = true
+	contact_monitor = true
+	max_contacts_reported = 8
 	_base_angular_damp = angular_damp
+	_max_value = maxf(value, 1.0)
 	if get_child_count() == 0:
 		_build_placeholder()
 
@@ -67,6 +98,10 @@ func _physics_process(delta: float) -> void:
 		global_position = global_position.lerp(net_position, t)
 		var q: Quaternion = global_basis.get_rotation_quaternion().slerp(net_rotation, t)
 		global_basis = Basis(q)
+
+	if value != _shown_value:
+		_shown_value = value
+		_update_visual()
 
 
 # --- API dla Grabbera (działa na hoście i na kliencie) -------------------------
@@ -125,7 +160,7 @@ func rpc_push(impulse: Vector3) -> void:
 		apply_central_impulse(impulse.limit_length(MAX_PUSH_IMPULSE))
 
 
-# --- Logika hosta ---------------------------------------------------------------
+# --- Logika hosta: chwyt ------------------------------------------------------------
 
 func _server_begin_hold(peer_id: int, local_point: Vector3, target: Vector3) -> void:
 	holders[peer_id] = {
@@ -150,6 +185,7 @@ func _server_update_hold(peer_id: int, target: Vector3) -> void:
 func server_end_hold(peer_id: int) -> void:
 	if not holders.erase(peer_id):
 		return
+	_last_release_time = Time.get_ticks_msec() / 1000.0
 	holder_count = holders.size()
 	if holders.is_empty():
 		angular_damp = _base_angular_damp
@@ -175,11 +211,58 @@ func _server_apply_holds() -> void:
 		apply_force(force.limit_length(grip.max_force), r)
 
 
+# --- Logika hosta: uderzenia i szkody ---------------------------------------------------
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if not multiplayer.is_server():
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	var max_dv: float = 0.0
+	for i in state.get_contact_count():
+		var other: Object = state.get_contact_collider_object(i)
+		if other is Player:
+			_try_knock_player(other as Player)
+		else:
+			max_dv = maxf(max_dv, state.get_contact_impulse(i).length() / mass)
+	if max_dv > hit_speed_threshold:
+		_apply_damage(max_dv - hit_speed_threshold, now)
+	_prev_velocity = state.linear_velocity
+
+
+func _apply_damage(excess_speed: float, now: float) -> void:
+	if value <= 0.0 or now - _last_hit_time < HIT_COOLDOWN:
+		return
+	_last_hit_time = now
+	var loss: float = excess_speed * damage_scale * (100.0 / maxf(durability, 1.0))
+	var loss_int: int = mini(roundi(loss), roundi(value))
+	if loss_int <= 0:
+		return
+	value -= loss_int
+	Ledger.record(_blame_id(now), item_name, loss_int)
+
+
+func _blame_id(now: float) -> int:
+	if not holders.is_empty():
+		return holders.keys()[0]
+	if now - _last_release_time < BLAME_WINDOW:
+		return last_holder_id
+	return 0
+
+
+func _try_knock_player(player: Player) -> void:
+	var speed: float = _prev_velocity.length()
+	if speed < knock_speed or speed * mass < knock_momentum:
+		return
+	if holders.has(player.get_multiplayer_authority()):
+		return  # własny przedmiot nie przewraca trzymającego
+	player.request_knockdown(_prev_velocity.normalized() * 4.0, player.down_duration)
+
+
 # --- Pomocnicze -------------------------------------------------------------------
 
 func _setup_sync() -> void:
 	var cfg := SceneReplicationConfig.new()
-	for prop: String in [":net_position", ":net_rotation", ":holder_count"]:
+	for prop: String in [":net_position", ":net_rotation", ":holder_count", ":value"]:
 		var path := NodePath(prop)
 		cfg.add_property(path)
 		cfg.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
@@ -193,6 +276,13 @@ func _setup_sync() -> void:
 	add_child(net_sync)
 
 
+func _update_visual() -> void:
+	if _material == null:
+		return
+	var damaged: float = 1.0 - clampf(value / _max_value, 0.0, 1.0)
+	_material.albedo_color = color.darkened(0.6 * damaged)
+
+
 func _build_placeholder() -> void:
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -203,8 +293,18 @@ func _build_placeholder() -> void:
 	var mesh_instance := MeshInstance3D.new()
 	var box_mesh := BoxMesh.new()
 	box_mesh.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	box_mesh.material = mat
+	_material = StandardMaterial3D.new()
+	_material.albedo_color = color
+	box_mesh.material = _material
 	mesh_instance.mesh = box_mesh
 	add_child(mesh_instance)
+
+	if label_text != "":
+		for side in [1.0, -1.0]:
+			var label := Label3D.new()
+			label.text = label_text
+			label.pixel_size = 0.004
+			label.modulate = Color(0.1, 0.1, 0.1)
+			label.position = Vector3(0, 0, side * (size.z * 0.5 + 0.005))
+			label.rotation.y = 0.0 if side > 0.0 else PI
+			add_child(label)
