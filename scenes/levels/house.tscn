@@ -1,0 +1,641 @@
+[gd_scene load_steps=44 format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/level.gd" id="lvl"]
+
+[ext_resource type="Script" path="res://scripts/levels/static_prop.gd" id="1_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/wall.glb" id="2_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/wallWindow.glb" id="3_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/wallDoorwayWide.glb" id="4_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/wallDoorway.glb" id="5_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenCabinet.glb" id="6_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenSink.glb" id="7_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenStove.glb" id="8_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenCabinetDrawer.glb" id="9_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/rugRectangle.glb" id="10_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/rugRounded.glb" id="11_r"]
+
+[ext_resource type="PackedScene" path="res://scenes/items/grabbable.tscn" id="12_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/loungeSofa.glb" id="13_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/tableCoffee.glb" id="14_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/cabinetTelevision.glb" id="15_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/televisionModern.glb" id="16_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/loungeChair.glb" id="17_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/lampSquareFloor.glb" id="18_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/pottedPlant.glb" id="19_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/bookcaseClosed.glb" id="20_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/cardboardBoxClosed.glb" id="21_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenFridge.glb" id="22_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/kitchenMicrowave.glb" id="23_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/washer.glb" id="24_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/table.glb" id="25_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/chairCushion.glb" id="26_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/bedDouble.glb" id="27_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/desk.glb" id="28_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/computerScreen.glb" id="29_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/chairDesk.glb" id="30_r"]
+
+[ext_resource type="PackedScene" path="res://assets/models/furniture/cardboardBoxOpen.glb" id="31_r"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+tonemap_mode = 2
+ssao_enabled = true
+
+[sub_resource type="StandardMaterial3D" id="Mat_grass"]
+albedo_color = Color(0.42, 0.62, 0.32, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.78, 0.6, 0.42, 1)
+roughness = 0.7
+
+[sub_resource type="StandardMaterial3D" id="Mat_path"]
+albedo_color = Color(0.72, 0.7, 0.66, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_post"]
+albedo_color = Color(0.93, 0.92, 0.88, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_truck"]
+albedo_color = Color(0.95, 0.72, 0.2, 1)
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="Mat_cargo"]
+albedo_color = Color(0.45, 0.4, 0.36, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_cab"]
+albedo_color = Color(0.25, 0.45, 0.75, 1)
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="Mat_wheel"]
+albedo_color = Color(0.12, 0.12, 0.13, 1)
+roughness = 0.9
+
+[node name="House" type="Node3D"]
+script = ExtResource("lvl")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, 0, -0.5, 0.354, 0.707, 0.612, 0.354, -0.707, 0.612, 0, 8, 0)
+shadow_enabled = true
+
+[node name="Map" type="Node3D" parent="."]
+
+[node name="Ground" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, -0.1, 8)
+use_collision = true
+size = Vector3(40, 0.2, 40)
+material = SubResource("Mat_grass")
+
+[node name="HouseFloor" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, -0.04, 4)
+use_collision = true
+size = Vector3(12, 0.1, 8)
+material = SubResource("Mat_floor")
+
+[node name="Path" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, -0.045, 9.2)
+use_collision = true
+size = Vector3(2, 0.1, 2.4)
+material = SubResource("Mat_path")
+
+[node name="WallN0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallN1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallN2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallN3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallN4" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallN5" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallS0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallS1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallS2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("4_r")
+
+[node name="WallS3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallS4" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallS5" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 8.05)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallW0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -0.05, 0, 0)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallW1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -0.05, 0, 2)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallW2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -0.05, 0, 4)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallW3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -0.05, 0, 6)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallE0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.95, 0, 0)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallE1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.95, 0, 2)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallE2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.95, 0, 4)
+script = ExtResource("1_r")
+model = ExtResource("3_r")
+
+[node name="WallE3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.95, 0, 6)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallMid0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 5.95, 0, 0)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallMid1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 5.95, 0, 2)
+script = ExtResource("1_r")
+model = ExtResource("5_r")
+
+[node name="WallMid2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 5.95, 0, 4)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallMid3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 5.95, 0, 6)
+script = ExtResource("1_r")
+model = ExtResource("5_r")
+
+[node name="WallKitchen0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 4.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallKitchen1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="WallKitchen2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4.05)
+script = ExtResource("1_r")
+model = ExtResource("2_r")
+
+[node name="Post0" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2895, 0)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post1" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 1.2895, 0)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post2" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2895, 8)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post3" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 1.2895, 8)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post4" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.2895, 0)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post5" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.2895, 8)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post6" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1.2895, 4)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Post7" type="CSGBox3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 1.2895, 4)
+use_collision = true
+size = Vector3(0.16, 2.5791, 0.16)
+material = SubResource("Mat_post")
+
+[node name="Kitchen0" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.3, 0, 0.95)
+script = ExtResource("1_r")
+model = ExtResource("6_r")
+
+[node name="Kitchen1" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.16, 0, 0.95)
+script = ExtResource("1_r")
+model = ExtResource("7_r")
+
+[node name="Kitchen2" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.02, 0, 0.95)
+script = ExtResource("1_r")
+model = ExtResource("8_r")
+
+[node name="Kitchen3" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.88, 0, 0.95)
+script = ExtResource("1_r")
+model = ExtResource("9_r")
+
+[node name="RugLiving" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.23, 0.01, 4.32)
+script = ExtResource("1_r")
+model = ExtResource("10_r")
+collide = false
+
+[node name="RugBedroom" type="StaticBody3D" parent="Map"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.03, 0.01, 6.92)
+script = ExtResource("1_r")
+model = ExtResource("11_r")
+collide = false
+
+[node name="Truck" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 13)
+
+[node name="Cargo" type="CSGCombiner3D" parent="Truck"]
+use_collision = true
+
+[node name="Outer" type="CSGBox3D" parent="Truck/Cargo"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 2.3)
+size = Vector3(2.6, 2.6, 4.6)
+material = SubResource("Mat_truck")
+
+[node name="Inner" type="CSGBox3D" parent="Truck/Cargo"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 2.2)
+operation = 2
+size = Vector3(2.4, 2, 4.6)
+material = SubResource("Mat_cargo")
+
+[node name="Cab" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, 5.6)
+use_collision = true
+size = Vector3(2.6, 1.9, 1.8)
+material = SubResource("Mat_cab")
+
+[node name="Wheel0" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.3, 0.8)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Wheel1" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.3, 0.8)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Wheel2" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.3, 3.8)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Wheel3" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.3, 3.8)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Wheel4" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.3, 5.6)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Wheel5" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.3, 5.6)
+size = Vector3(0.3, 0.6, 0.6)
+material = SubResource("Mat_wheel")
+
+[node name="Ramp" type="CSGBox3D" parent="Truck"]
+transform = Transform3D(1, 0, 0, 0, 0.9783, 0.207, 0, -0.207, 0.9783, 0, 0.235, -1.3)
+use_collision = true
+size = Vector3(2.2, 0.1, 2.7075)
+material = SubResource("Mat_cargo")
+
+[node name="TruckLabel" type="Label3D" parent="Truck"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.32, 1.6, 2.3)
+pixel_size = 0.01
+text = "PRZEPROWADZKI"
+modulate = Color(0.15, 0.15, 0.15, 1)
+font_size = 48
+outline_size = 0
+
+[node name="Items" type="Node3D" parent="."]
+
+[node name="Kanapa" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8, 0.49, 0.6)
+item_name = "Kanapa"
+model = ExtResource("13_r")
+value = 500
+durability = 120
+mass = 40
+
+[node name="StolikKawowy" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8, 0.26, 2.4)
+item_name = "Stolik kawowy"
+model = ExtResource("14_r")
+value = 150
+durability = 100
+mass = 10
+
+[node name="SzafkaRTV" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.8, 0.34, 5.2)
+item_name = "Szafka RTV"
+model = ExtResource("15_r")
+value = 250
+durability = 100
+mass = 20
+
+[node name="Telewizor" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2.8, 1.1047, 5.25)
+item_name = "Telewizor"
+model = ExtResource("16_r")
+value = 600
+durability = 40
+mass = 12
+
+[node name="Fotel" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(0.866, 0, -0.5, 0, 1, 0, 0.5, 0, 0.866, 5, 0.49, 1)
+item_name = "Fotel"
+model = ExtResource("17_r")
+value = 300
+durability = 100
+mass = 15
+
+[node name="Lampa" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 0.89, 0.4)
+item_name = "Lampa"
+model = ExtResource("18_r")
+value = 120
+durability = 50
+mass = 4
+
+[node name="Kwiatek" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 0.684, 7.5)
+item_name = "Kwiatek"
+model = ExtResource("19_r")
+value = 60
+durability = 60
+mass = 6
+
+[node name="Regal" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0.35, 0.88, 3.6)
+item_name = "Regał"
+model = ExtResource("20_r")
+value = 200
+durability = 100
+mass = 25
+
+[node name="Karton1" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4, 0.311, 6.6)
+item_name = "Karton"
+model = ExtResource("21_r")
+value = 80
+durability = 100
+mass = 5
+
+[node name="Karton2" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.95, 0.311, 6.6)
+item_name = "Karton"
+model = ExtResource("21_r")
+value = 80
+durability = 100
+mass = 5
+
+[node name="Karton3" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.95, 0.873, 6.6)
+item_name = "Karton"
+model = ExtResource("21_r")
+value = 80
+durability = 100
+mass = 5
+
+[node name="KartonSzklo" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.4, 0.311, 5.7)
+item_name = "Karton (szkło)"
+model = ExtResource("21_r")
+label_text = "SZKŁO"
+value = 250
+durability = 25
+mass = 5
+
+[node name="Lodowka" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.6, 0.95, 0.3619)
+item_name = "Lodówka"
+model = ExtResource("22_r")
+value = 800
+durability = 80
+mass = 60
+
+[node name="Mikrofalowka" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.73, 1.11, 0.5)
+item_name = "Mikrofalówka"
+model = ExtResource("23_r")
+value = 200
+durability = 50
+mass = 8
+
+[node name="Pralka" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.4, 0.5, 3.1)
+item_name = "Pralka"
+model = ExtResource("24_r")
+value = 700
+durability = 80
+mass = 50
+
+[node name="Stol" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.6, 0.3567, 2.6)
+item_name = "Stół"
+model = ExtResource("25_r")
+value = 250
+durability = 100
+mass = 15
+
+[node name="Krzeslo1" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8.1, 0.49, 3.55)
+item_name = "Krzesło"
+model = ExtResource("26_r")
+value = 60
+durability = 100
+mass = 5
+
+[node name="Krzeslo2" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 9.1, 0.49, 3.55)
+item_name = "Krzesło"
+model = ExtResource("26_r")
+value = 60
+durability = 100
+mass = 5
+
+[node name="Lozko" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.405, 5.25)
+item_name = "Łóżko"
+model = ExtResource("27_r")
+value = 600
+durability = 120
+mass = 45
+
+[node name="Biurko" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8, 0.4144, 7.5)
+item_name = "Biurko"
+model = ExtResource("28_r")
+value = 300
+durability = 100
+mass = 20
+
+[node name="Monitor" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8, 1.0931, 7.6)
+item_name = "Monitor"
+model = ExtResource("29_r")
+value = 400
+durability = 30
+mass = 4
+
+[node name="KrzesloBiurowe" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.6376, 6.75)
+item_name = "Krzesło biurowe"
+model = ExtResource("30_r")
+value = 150
+durability = 100
+mass = 8
+
+[node name="Regal2" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 11.6, 0.88, 7.4)
+item_name = "Regał"
+model = ExtResource("20_r")
+value = 200
+durability = 100
+mass = 25
+
+[node name="Karton4" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.6, 0.311, 4.5)
+item_name = "Karton"
+model = ExtResource("21_r")
+value = 80
+durability = 100
+mass = 5
+
+[node name="Karton5" parent="Items" instance=ExtResource("12_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.3, 0.311, 4.5)
+item_name = "Karton"
+model = ExtResource("31_r")
+value = 80
+durability = 100
+mass = 5
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="PlayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("res://scenes/player/player.tscn")
+spawn_path = NodePath("../Players")
+
+[node name="SpawnPoints" type="Node3D" parent="."]
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3, 0.2, 10.5)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 4, 0.2, 10.5)
+
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 2, 0.2, 10.5)

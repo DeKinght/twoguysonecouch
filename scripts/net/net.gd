@@ -19,7 +19,11 @@ signal all_ready                  ## tylko host: wszyscy wczytali poziom
 const DEFAULT_PORT: int = 7777
 const MAX_PLAYERS: int = 3
 const MENU_SCENE: String = "res://ui/main_menu.tscn"
-const LEVEL_SCENE: String = "res://scenes/levels/block.tscn"
+## Mapy do wyboru w lobby (nazwa -> scena). Pierwsza jest domyślna.
+const LEVELS: Dictionary = {
+	"Blok": "res://scenes/levels/block.tscn",
+	"Dom (mapa testowa)": "res://scenes/levels/house.tscn",
+}
 
 ## 480 = publiczny testowy App ID Valve ("Spacewar"). Do testów bez wydawania gry.
 const STEAM_APP_ID: int = 480
@@ -35,6 +39,8 @@ const RESULT_OK: int = 1
 
 ## Blokuje sterowanie (np. gdy widać ekran podsumowania).
 var input_locked: bool = false
+## Wybrana przez hosta mapa (ścieżka sceny z LEVELS).
+var level_scene: String = LEVELS.values()[0]
 var local_name: String = "Gracz"
 var status_message: String = ""
 ## peer_id -> nazwa gracza
@@ -256,7 +262,7 @@ func start_game() -> void:
 		return
 	if steam != null and lobby_id != 0:
 		steam.setLobbyJoinable(lobby_id, false)  # nikt nowy nie dołączy w trakcie gry
-	_rpc_load_level.rpc()
+	_rpc_load_level.rpc(level_scene)
 
 
 ## Każdy peer woła to po wczytaniu poziomu.
@@ -265,13 +271,16 @@ func notify_level_ready() -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_load_level() -> void:
+func _rpc_load_level(scene_path: String) -> void:
+	if not scene_path in LEVELS.values():
+		scene_path = LEVELS.values()[0]
+	level_scene = scene_path
 	game_started = true
 	ready_peers.clear()
 	_all_ready_emitted = false
 	input_locked = false
 	Ledger.reset()
-	get_tree().change_scene_to_file(LEVEL_SCENE)
+	get_tree().change_scene_to_file(level_scene)
 
 
 ## Tylko host: wszyscy wracają do lobby (połączenie zostaje).
