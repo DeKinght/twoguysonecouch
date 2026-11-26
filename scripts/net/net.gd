@@ -16,7 +16,7 @@ signal all_ready                  ## tylko host: wszyscy wczytali poziom
 const DEFAULT_PORT: int = 7777
 const MAX_PLAYERS: int = 3
 const MENU_SCENE: String = "res://ui/main_menu.tscn"
-const LEVEL_SCENE: String = "res://scenes/levels/test_room.tscn"
+const LEVEL_SCENE: String = "res://scenes/levels/house.tscn"
 
 var local_name: String = "Gracz"
 var status_message: String = ""

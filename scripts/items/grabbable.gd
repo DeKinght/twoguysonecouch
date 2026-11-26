@@ -15,6 +15,11 @@ extends RigidBody3D
 ## winowajcę (kto trzymał) w Ledgerze.
 
 @export var item_name: String = "Karton"
+## Model 3D (.glb). Puste = zwykły kolorowy prostopadłościan z `size` i `color`.
+## Z modelem kolizja (box) i `size` liczą się same z jego wymiarów.
+@export var model: PackedScene
+## Skala modelu. Modele Kenney Furniture Kit są w skali ~1:2, więc 2.0.
+@export var model_scale: float = 2.0
 @export var size: Vector3 = Vector3(0.5, 0.5, 0.5)
 @export var color: Color = Color(0.72, 0.55, 0.35)
 ## Napis na ściankach (np. "SZKŁO"). Puste = brak.
@@ -60,6 +65,8 @@ var _base_angular_damp: float
 var _max_value: float
 var _shown_value: float = -1.0
 var _material: StandardMaterial3D
+## Przy modelu: półprzezroczysta czerń nakładana na model, ciemnieje ze szkodami.
+var _overlay: StandardMaterial3D
 var _prev_velocity: Vector3 = Vector3.ZERO
 var _last_hit_time: float = -10.0
 var _last_release_time: float = -10.0
@@ -75,7 +82,10 @@ func _ready() -> void:
 	_base_angular_damp = angular_damp
 	_max_value = maxf(value, 1.0)
 	if get_child_count() == 0:
-		_build_placeholder()
+		if model != null:
+			_build_from_model()
+		else:
+			_build_placeholder()
 
 	net_position = global_position
 	net_rotation = global_basis.get_rotation_quaternion()
@@ -277,10 +287,69 @@ func _setup_sync() -> void:
 
 
 func _update_visual() -> void:
-	if _material == null:
-		return
 	var damaged: float = 1.0 - clampf(value / _max_value, 0.0, 1.0)
-	_material.albedo_color = color.darkened(0.6 * damaged)
+	if _material != null:
+		_material.albedo_color = color.darkened(0.6 * damaged)
+	if _overlay != null:
+		_overlay.albedo_color = Color(0, 0, 0, 0.6 * damaged)
+
+
+## Wstawia model wyśrodkowany na środku ciała i dopasowuje do niego kolizję (box).
+func _build_from_model() -> void:
+	var visual: Node3D = model.instantiate()
+	visual.name = "Model"
+	visual.scale = Vector3.ONE * model_scale
+	add_child(visual)
+
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(visual, meshes)
+	var bounds := AABB()
+	var first: bool = true
+	for mi in meshes:
+		var box: AABB = _transform_to_self(mi) * mi.get_aabb()
+		bounds = box if first else bounds.merge(box)
+		first = false
+	if first:
+		push_warning("%s: model bez siatek, używam placeholdera" % name)
+		visual.queue_free()
+		_build_placeholder()
+		return
+
+	var center: Vector3 = bounds.get_center()
+	visual.position -= center  # środek modelu = środek ciała (i środek masy)
+	size = bounds.size
+
+	var shape := CollisionShape3D.new()
+	var collision_box := BoxShape3D.new()
+	collision_box.size = size
+	shape.shape = collision_box
+	add_child(shape)
+
+	_overlay = StandardMaterial3D.new()
+	_overlay.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_overlay.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_overlay.albedo_color = Color(0, 0, 0, 0)
+	for mi in meshes:
+		mi.material_overlay = _overlay
+
+	_add_labels()
+
+
+func _collect_meshes(node: Node, out: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		out.append(node)
+	for child in node.get_children():
+		_collect_meshes(child, out)
+
+
+## Transformacja węzła potomnego względem tego ciała (bez zależności od global_transform).
+func _transform_to_self(node: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var n: Node = node
+	while n != self and n is Node3D:
+		t = (n as Node3D).transform * t
+		n = n.get_parent()
+	return t
 
 
 func _build_placeholder() -> void:
@@ -298,7 +367,10 @@ func _build_placeholder() -> void:
 	box_mesh.material = _material
 	mesh_instance.mesh = box_mesh
 	add_child(mesh_instance)
+	_add_labels()
 
+
+func _add_labels() -> void:
 	if label_text != "":
 		for side in [1.0, -1.0]:
 			var label := Label3D.new()
