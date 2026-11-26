@@ -188,7 +188,8 @@ func _setup_sync() -> void:
 	net_sync.replication_config = cfg
 	net_sync.replication_interval = 1.0 / 30.0
 	# Host włącza widoczność dla danego peera dopiero, gdy ten wczyta poziom.
-	net_sync.public_visibility = false
+	# Klient MUSI mieć widoczność włączoną - od niej zależy, czy może wysyłać RPC do hosta.
+	net_sync.public_visibility = not multiplayer.is_server()
 	add_child(net_sync)
 
 
