@@ -2,3 +2,5 @@
 *.translation
 /export/
 
+# Dodatki (binaria ~100 MB) - pobierz GodotSteam i SteamMultiplayerPeer osobno
+/addons/
