@@ -44,6 +44,11 @@ func _ready() -> void:
 
 	_status.text = Net.status_message
 	Net.status_message = ""
+	Net.input_locked = false
+
+	# Powrót z gry: połączenie nadal trwa, więc od razu pokazujemy lobby.
+	if not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
+		_show_lobby()
 
 
 func _build_main_box(parent: Control) -> void:

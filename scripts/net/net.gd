@@ -16,8 +16,10 @@ signal all_ready                  ## tylko host: wszyscy wczytali poziom
 const DEFAULT_PORT: int = 7777
 const MAX_PLAYERS: int = 3
 const MENU_SCENE: String = "res://ui/main_menu.tscn"
-const LEVEL_SCENE: String = "res://scenes/levels/test_room.tscn"
+const LEVEL_SCENE: String = "res://scenes/levels/block.tscn"
 
+## Blokuje sterowanie (np. gdy widać ekran podsumowania).
+var input_locked: bool = false
 var local_name: String = "Gracz"
 var status_message: String = ""
 ## peer_id -> nazwa gracza
@@ -110,8 +112,24 @@ func _rpc_load_level() -> void:
 	game_started = true
 	ready_peers.clear()
 	_all_ready_emitted = false
+	input_locked = false
 	Ledger.reset()
 	get_tree().change_scene_to_file(LEVEL_SCENE)
+
+
+## Tylko host: wszyscy wracają do lobby (połączenie zostaje).
+func return_to_lobby() -> void:
+	if multiplayer.is_server():
+		_rpc_back_to_lobby.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_back_to_lobby() -> void:
+	game_started = false
+	ready_peers.clear()
+	_all_ready_emitted = false
+	input_locked = false
+	get_tree().change_scene_to_file(MENU_SCENE)
 
 
 @rpc("any_peer", "call_local", "reliable")
