@@ -605,10 +605,12 @@ func _build_cab_interior() -> void:
 		return [Vector3(x0, y0, z0) * S, Vector3(x1, y1, z1) * S]
 
 	var parts: Array = [
-		[u.call(-0.7, CAB_FLOOR_U - 0.03, 0.45, 0.7, CAB_FLOOR_U, 1.22), dark],       # podłoga
-		[u.call(-0.71, CAB_FLOOR_U, 0.45, 0.71, 1.37, 0.47), trim],                   # tył kabiny
-		[u.call(-0.7, 0.62, 1.04, 0.7, 0.8, 1.2), dash],                              # deska
-		[u.call(-0.7, CAB_FLOOR_U, 1.1, 0.7, 0.62, 1.2), dark],                       # pod deską
+		# Wymiary dopasowane do skorupy kabiny: boki ~±0.6, dół przedniej szyby przy z ~1.09,
+		# niżej zaczyna się maska - nic nie może wystawać na zewnątrz.
+		[u.call(-0.58, CAB_FLOOR_U - 0.03, 0.47, 0.58, CAB_FLOOR_U, 1.06), dark],     # podłoga
+		[u.call(-0.6, CAB_FLOOR_U, 0.45, 0.6, 1.3, 0.47), trim],                      # tył kabiny
+		[u.call(-0.57, 0.64, 0.98, 0.57, 0.77, 1.07), dash],                          # deska
+		[u.call(-0.57, CAB_FLOOR_U, 1.0, 0.57, 0.64, 1.07), dark],                    # pod deską
 		[u.call(-0.12, CAB_FLOOR_U, 0.5, 0.12, 0.6, 0.95), dark],                     # tunel
 	]
 	for side: float in [1.0, -1.0]:
@@ -628,13 +630,13 @@ func _build_cab_interior() -> void:
 		cyl.height = 0.01
 		cyl.material = _mat(Color(0.85, 0.88, 0.92))
 		gauge.mesh = cyl
-		gauge.position = Vector3((0.32 + dx) * S, 0.79 * S, 1.06 * S)
+		gauge.position = Vector3((0.32 + dx) * S, 0.772 * S, 1.02 * S)
 		gauge.rotation = Vector3(deg_to_rad(-70), 0, 0)
 		add_child(gauge)
 
 	var column := Node3D.new()
 	column.name = "SteeringColumn"
-	column.position = Vector3(0.32 * S, 0.8 * S, 0.98 * S)
+	column.position = Vector3(0.32 * S, 0.79 * S, 0.94 * S)
 	column.rotation = Vector3(deg_to_rad(-55), 0, 0)  # kierownica pochylona do kierowcy
 	add_child(column)
 	_steering_wheel = Node3D.new()
