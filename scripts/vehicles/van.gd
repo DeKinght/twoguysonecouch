@@ -77,6 +77,7 @@ var _wheel_spin: float = 0.0
 var _bump_area: Area3D
 var _bump_timer: float = 0.0
 var _steering_wheel: Node3D
+var _start_transform: Transform3D
 
 # Dźwięk (u każdego gracza, liczony z replikowanego stanu).
 var _snd_idle: AudioStreamPlayer3D
@@ -110,6 +111,8 @@ const CARGO_HALF_W_U: float = 0.55
 const CARGO_BACK_U: float = -1.6
 const CARGO_FRONT_U: float = 0.2
 const HINGE_U: Vector3 = Vector3(0.0, 0.5, -1.55)
+## Poniżej tej wysokości auto uznajemy za spadnięte z mapy i stawiamy z powrotem na starcie.
+const FALL_Y: float = -15.0
 const BENCH_HEIGHT: float = 0.42  ## [m] nad podłogą paki
 const BENCH_DEPTH: float = 0.4
 const CAB_FLOOR_U: float = 0.45
@@ -142,6 +145,7 @@ func _ready() -> void:
 
 	net_position = global_position
 	net_rotation = global_basis.get_rotation_quaternion()
+	_start_transform = global_transform
 	_setup_sync()
 
 	if multiplayer.is_server():
@@ -154,6 +158,8 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if multiplayer.is_server():
+		if global_position.y < FALL_Y:
+			_server_reset_position()
 		_server_drive(delta)
 		_server_knock_players(delta)
 		net_position = global_position
@@ -168,7 +174,8 @@ func _physics_process(delta: float) -> void:
 		_client_wheel_visuals(delta)
 	_animate_door(delta)
 	if _steering_wheel != null:
-		_steering_wheel.rotation.z = -net_steer * 4.0  # kierownica obraca się ~4x bardziej niż koła
+		# Obrót wokół osi kolumny kierowniczej (lokalne Y koła kierownicy), ~4x bardziej niż koła.
+		_steering_wheel.rotation.y = net_steer * 4.0
 
 
 func _process(delta: float) -> void:
@@ -375,6 +382,14 @@ func _server_drive(delta: float) -> void:
 		apply_central_force(-v.normalized() * resist)
 
 
+func _server_reset_position() -> void:
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	global_transform = _start_transform
+	net_position = global_position
+	net_rotation = global_basis.get_rotation_quaternion()
+
+
 func _set_brakes(front: float, rear: float) -> void:
 	for wheel in _wheels:
 		wheel.brake = front if wheel.use_as_steering else rear
@@ -491,11 +506,16 @@ func _build_wheels(visual: Node3D) -> void:
 		add_child(wheel)
 		_wheels.append(wheel)
 
-		# Siatka pod pomocniczym węzłem: u klientów obracamy go ręcznie (skręt i toczenie),
-		# u hosta obraca się samo VehicleWheel3D. Środek siatki = oś koła.
+		# Siatka pod pomocniczym węzłem. U hosta siedzi w VehicleWheel3D (obraca się samo).
+		# U klientów auto jest zamrożone i fizyka nie przesuwa kół - wtedy koła zostawałyby
+		# w miejscu spawnu, więc podpinamy je pod karoserię i obracamy ręcznie.
 		var holder := Node3D.new()
-		holder.name = "Visual"
-		wheel.add_child(holder)
+		holder.name = "Visual" + names[wheel_name]
+		if multiplayer.is_server():
+			wheel.add_child(holder)
+		else:
+			holder.position = center
+			add_child(holder)
 		mesh.reparent(holder, false)
 		mesh.scale = Vector3.ONE * S
 		mesh.position = -mesh_center * S

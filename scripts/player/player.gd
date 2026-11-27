@@ -61,6 +61,10 @@ const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
 @export_group("Sieć")
 @export var remote_smoothing: float = 20.0
 
+@export_group("Spadnięcie z mapy")
+## Poniżej tej wysokości gracz wraca na punkt startowy mapy (w Siedzibie: do budynku).
+@export var fall_respawn_y: float = -15.0
+
 @export_group("Pojazdy")
 ## Z jakiej odległości można wsiąść / otworzyć drzwi auta.
 @export var interact_reach: float = 3.0
@@ -221,6 +225,9 @@ func _physics_process(delta: float) -> void:
 
 	var vy_before: float = velocity.y
 	move_and_slide()
+	if global_position.y < fall_respawn_y:
+		_respawn()
+		return
 	if not was_on_floor and is_on_floor() and vy_before < -fall_knockdown_speed:
 		knock_down(Vector3.ZERO, down_duration)
 	_push_bodies()
@@ -666,3 +673,18 @@ func _place_chase_cam(blend: float) -> void:
 	var target: Vector3 = vt.origin - forward * chase_distance + Vector3.UP * (chase_height - _pitch * 4.0)
 	_chase_cam.global_position = _chase_cam.global_position.lerp(target, blend)
 	_chase_cam.look_at(vt.origin + Vector3.UP * 2.0 + forward * 2.0)
+
+
+## Spadliśmy pod mapę: wracamy na swój punkt startowy poziomu (SpawnPoints).
+func _respawn() -> void:
+	velocity = Vector3.ZERO
+	# Gracz siedzi w <poziom>/Players, więc punkty startowe są u "dziadka".
+	var level: Node = get_parent().get_parent() if get_parent() != null else null
+	var points: Node = level.get_node_or_null("SpawnPoints") if level != null else null
+	var target := Vector3(0, 2, 0)
+	if points != null and points.get_child_count() > 0:
+		var index: int = maxi(0, Net.ready_peers.find(get_multiplayer_authority()))
+		target = (points.get_child(index % points.get_child_count()) as Node3D).global_position
+	global_position = target + Vector3.UP * 0.1
+	_last_step_pos = global_position
+	net_position = global_position
