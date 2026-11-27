@@ -20,7 +20,8 @@ func _physics_process(_delta: float) -> void:
 		return
 	var from: Vector3 = camera.global_position
 	var to: Vector3 = from + (-camera.global_basis.z) * reach
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 4)  # świat + przedmioty
+	# świat + przedmioty + warstwa "do użycia" (np. otwarte drzwi, przez które się przechodzi)
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 4 | Door.INTERACT_LAYER)
 	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
 	looked_at = null if hit.is_empty() else _find_interactable(hit["collider"])
 

@@ -29,7 +29,7 @@ func build_panel(size: Vector3, offset: Vector3, material: Material, model_path:
 	panel = AnimatableBody3D.new()
 	panel.name = "Panel"
 	panel.position = offset
-	panel.collision_layer = 1  # świat: blokuje graczy i przedmioty, widać go w raycastach
+	panel.collision_layer = 1 | INTERACT_LAYER  # świat (blokuje) + "do użycia" (widzi E)
 	panel.collision_mask = 0
 	add_child(panel)
 
@@ -79,8 +79,23 @@ func _rpc_set_open(open: bool) -> void:
 	is_open = open
 	if _tween != null:
 		_tween.kill()
+	# Otwarte skrzydło nie ma kolizji: nie blokuje przejścia ani nie zakleszcza graczy
+	# (nawet gdyby fizyka nie nadążała za obrotem zawiasu). Włączamy ją po zamknięciu.
+	if open:
+		_set_solid(false)
 	_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_tween.tween_property(self, "rotation", _closed_rotation + (open_rotation if open else Vector3.ZERO), duration)
+	if not open:
+		_tween.tween_callback(func() -> void: _set_solid(not is_open))
+
+
+## Warstwa 5 (16) = "do użycia": widzi ją tylko promień E (Interactor), gracze i przedmioty nie.
+const INTERACT_LAYER: int = 16
+
+
+func _set_solid(solid: bool) -> void:
+	if panel != null:
+		panel.collision_layer = (1 | INTERACT_LAYER) if solid else INTERACT_LAYER
 
 
 ## Wstawia model i rozciąga go do rozmiaru skrzydła. Zwraca false, jeśli modelu nie ma.

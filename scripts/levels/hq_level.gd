@@ -39,6 +39,8 @@ const COL_RACK: Color = Color(0.95, 0.72, 0.15)      ## żółte regały (jak na
 const COL_RACK_SHELF: Color = Color(0.42, 0.42, 0.45)
 const COL_WOOD: Color = Color(0.55, 0.38, 0.22)
 const COL_PAINT: Color = Color(1.0, 0.85, 0.2)
+## Jak gęsto stoją kartony na regałach (0..1).
+const RACK_FILL: float = 0.28
 
 ## Plakaty: [pozycja środka, obrót Y (w stronę pokoju), roboczy tytuł]
 const POSTERS: Array = [
@@ -128,7 +130,7 @@ func _build_lights() -> void:
 ## Kanapa naprzeciw telewizora stojącego na kartonach.
 func _build_lounge() -> void:
 	_prop("rugRectangle", Vector3(9.6, 0.0, 2.3), 0.0, 3.2, false)
-	_prop("loungeSofaLong", Vector3(9.69, 0.0, 3.91), PI, 3.6)
+	_wersalka(Vector3(9.6, 0.0, 3.7), PI)  # przodem do telewizora
 
 	var box_top: float = 0.0
 	for x: float in [8.75, 9.52, 10.29]:
@@ -137,6 +139,63 @@ func _build_lounge() -> void:
 		box_top = _size(box).y
 	var tv := _prop("televisionModern", Vector3(9.52, box_top, 0.0), 0.0, 1.9)
 	_back_to_wall(tv, 0.0, 0.0)
+
+
+## Klasyczna wersalka z PRL-u: kanciasta, z boczkami i dwiema poduchami.
+## Każda część ma własny hitbox, więc da się na niej usiąść/wskoczyć i nic nie wisi w powietrzu.
+## Lokalnie: szerokość wzdłuż X, przód w stronę +Z (obrót rot_y odwraca ją do telewizora).
+func _wersalka(pos: Vector3, rot_y: float) -> void:
+	var body := StaticBody3D.new()
+	body.name = "Wersalka"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = pos
+	body.rotation.y = rot_y
+	_geo.add_child(body)
+
+	var fabric := Color(0.58, 0.34, 0.2)       # brązowo-rudy plusz
+	var cushion := Color(0.66, 0.4, 0.24)
+	var base := Color(0.32, 0.2, 0.13)
+	var half_w: float = 0.95                   # pół szerokości bez boczków
+	var arm: float = 0.16
+	var depth: float = 0.9
+	var back_d: float = 0.22                   # grubość oparcia
+
+	# Skrzynia (podstawa na pościel) i nóżki.
+	_part(body, Vector3(0, 0.23, 0), Vector3(half_w * 2.0, 0.3, depth), base)
+	for x: float in [-half_w - arm * 0.5, half_w + arm * 0.5]:
+		for z: float in [-depth * 0.5 + 0.06, depth * 0.5 - 0.06]:
+			_part(body, Vector3(x, 0.04, z), Vector3(0.06, 0.08, 0.06), Color(0.15, 0.1, 0.07), false)
+	# Siedzisko: dwie poduchy.
+	var seat_d: float = depth - back_d
+	for side: float in [-1.0, 1.0]:
+		_part(body, Vector3(side * half_w * 0.5, 0.45, back_d * 0.5), Vector3(half_w - 0.02, 0.14, seat_d), cushion)
+	# Oparcie: skrzynia + dwie poduchy.
+	_part(body, Vector3(0, 0.62, -depth * 0.5 + back_d * 0.5), Vector3(half_w * 2.0, 0.5, back_d), fabric)
+	for side: float in [-1.0, 1.0]:
+		_part(body, Vector3(side * half_w * 0.5, 0.66, -depth * 0.5 + back_d + 0.06),
+				Vector3(half_w - 0.04, 0.34, 0.12), cushion)
+	# Boczki.
+	for side: float in [-1.0, 1.0]:
+		_part(body, Vector3(side * (half_w + arm * 0.5), 0.36, 0), Vector3(arm, 0.56, depth), fabric)
+
+
+## Część mebla: siatka + (opcjonalnie) jej własny hitbox w tym samym ciele.
+func _part(body: StaticBody3D, center: Vector3, size: Vector3, color: Color, collide: bool = true) -> void:
+	var mesh := MeshInstance3D.new()
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = size
+	mesh.mesh = box_mesh
+	mesh.material_override = _material(color)
+	mesh.position = center
+	body.add_child(mesh)
+	if collide:
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = size
+		shape.shape = box
+		shape.position = center
+		body.add_child(shape)
 
 
 ## Biurko z komputerem (tu będzie wybór zleceń).
@@ -359,9 +418,12 @@ func _glass(along_x: bool, fixed: float, a: float, b: float) -> void:
 	var key: String = "glass"
 	if not _materials.has(key):
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.7, 0.85, 0.95, 0.22)
+		# Przydymione szkło: ciemne, mało przezroczyste, z lekkim połyskiem.
+		mat.albedo_color = Color(0.12, 0.14, 0.17, 0.72)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.roughness = 0.05
+		mat.roughness = 0.08
+		mat.metallic = 0.3
+		mat.metallic_specular = 0.8
 		_materials[key] = mat
 	var size := Vector3(b - a, WIN_TOP - SILL, 0.03) if along_x else Vector3(0.03, WIN_TOP - SILL, b - a)
 	var center := Vector3((a + b) * 0.5, (SILL + WIN_TOP) * 0.5, fixed) if along_x \
@@ -415,7 +477,7 @@ func _rack(x0: float, x1: float, z0: float, z1: float, height: float = 2.2, leve
 				var w: float = _rng.randf_range(0.38, 0.55)
 				if cursor + w > length - 0.05:
 					break
-				if _rng.randf() < 0.75:
+				if _rng.randf() < RACK_FILL:
 					var along: float = cursor + w * 0.5
 					var pos: Vector3
 					if long_x:
