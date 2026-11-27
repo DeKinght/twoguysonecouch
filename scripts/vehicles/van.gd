@@ -610,7 +610,9 @@ func _build_cab_interior() -> void:
 		# wnętrze ma tylko ±0.33, inaczej widać je przez wycięcie na koło.
 		[u.call(-0.5, CAB_FLOOR_U - 0.03, 0.47, 0.5, CAB_FLOOR_U, 0.78), dark],       # podłoga przy fotelach
 		[u.call(-0.32, CAB_FLOOR_U - 0.03, 0.78, 0.32, CAB_FLOOR_U, 1.06), dark],     # podłoga między nadkolami
-		[u.call(-0.52, CAB_FLOOR_U, 0.45, 0.52, 1.3, 0.47), trim],                    # tył kabiny
+		# Ścianka między kabiną a paką: cofnięta do przedniej ściany paki (z = 0.2..0.22) i węższa
+		# od paki (±0.54), więc z zewnątrz zasłaniają ją boki paki - nic nie wystaje.
+		[u.call(-0.54, CAB_FLOOR_U, 0.2, 0.54, 1.5, 0.22), trim],
 		[u.call(-0.52, 0.67, 0.98, 0.52, 0.77, 1.07), dash],                          # deska
 		[u.call(-0.32, CAB_FLOOR_U, 1.0, 0.32, 0.67, 1.07), dark],                    # pod deską
 		[u.call(-0.12, CAB_FLOOR_U, 0.5, 0.12, 0.6, 0.95), dark],                     # tunel
