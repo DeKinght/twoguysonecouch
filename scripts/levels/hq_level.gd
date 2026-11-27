@@ -234,7 +234,7 @@ func _build_office() -> void:
 	var top: float = _size(desk_a).y
 	var z: float = desk_a.position.z if desk_a != null else 0.6
 
-	_prop("computerScreen", Vector3(16.1, top, z - 0.15), 0.12, 0.7, false)
+	var monitor := _prop("computerScreen", Vector3(16.1, top, z - 0.15), 0.12, 0.7, false)
 	_prop("computerScreen", Vector3(16.85, top, z - 0.15), -0.12, 0.7, false)
 	_prop("computerKeyboard", Vector3(16.45, top, z + 0.2), 0.0, 0.5, false)
 	_prop("computerMouse", Vector3(16.95, top, z + 0.22), 0.0, 0.1, false)
@@ -249,7 +249,15 @@ func _build_office() -> void:
 	_decor("plant_cactus", Vector3(19.35, top, z + 0.15), 0.0)
 
 	_marker("JobComputer", Vector3(16.45, 0.0, 2.3))
-	_sign("COMPUTER\njob board (soon)", Vector3(16.5, 2.0, 1.4))
+	_sign("JOB BOARD", Vector3(16.5, 2.0, 1.4))
+	if monitor != null:
+		# Komputer ze zleceniami w lewym monitorze (E = usiądź). Stała nazwa = ta sama ścieżka RPC u wszystkich.
+		var pc := JobComputer.new()
+		pc.name = "Computer"
+		add_child(pc)
+		pc.global_transform = monitor.global_transform
+		var m: Vector3 = monitor.get_meta("size")
+		pc.setup(Vector2(m.x * 0.86, m.y * 0.56), Vector3(0.0, m.y * 0.6, m.z * 0.5 - 0.035))
 
 
 ## Żółte regały dekoracyjne pełne kartonów.

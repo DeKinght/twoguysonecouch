@@ -60,3 +60,9 @@ Przebudowa postaci po zmianie w sculpt.py:
 python tools/characters/sculpt.py /tmp/chars        # wymaga numpy, scikit-image, pyfqmr
 godot --headless --path . -s tools/characters/build_meshes.gd -- /tmp/chars
 ```
+
+## Komputer ze zleceniami (Siedziba)
+Lewy monitor na biurku (`scripts/interact/job_computer.gd`, ekran `ui/computer_screen.gd`). E = kamera podjeżdża
+do monitora i otwiera się giełda zleceń; Esc lub "Wyloguj" zamyka. Z komputera korzysta jedna osoba naraz
+(stan trzyma host) - pozostali widzą "Komputer zajęty". Zlecenia są w `JobComputer.JOBS` (tytuł, opis, obrazek,
+gwiazdki 0-5). Na czas korzystania gra używa własnego, większego kursora.
