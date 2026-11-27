@@ -1,63 +1,47 @@
 class_name CharacterModel
 extends Node3D
-## Postać tragarza: szkielet (Skeleton3D, 17 kości), siatka ze skinningiem i animacje.
-## Wszystko budowane w kodzie, więc nie ma plików .glb do importu.
+## Postać tragarza: szkielet (Skeleton3D, 17 kości), gładka siatka ze skinningiem i animacje.
 ##
-## Wygląd: krępi, zabawni tragarze z dużą głową i krótkimi nogami. Wariant (`VARIANTS`)
-## zmienia kolory ubrania, nakrycie głowy i dodatki (wąsy, broda, okulary, brzuch...).
+## Siatki (assets/characters/*.res) są wyrzeźbione skryptem tools/characters/sculpt.py
+## (miękko łączone kształty + marching cubes, wagi kości płynnie przechodzą na stawach)
+## i zamienione na zasoby Godota przez tools/characters/build_meshes.gd.
+## Pozycje kości poniżej muszą się zgadzać z BONES w sculpt.py.
 ##
-## Postać stoi stopami w (0, 0, 0) i patrzy w -Z (jak Player). Każdy element siatki
-## jest przypięty w 100% do jednej kości (sztywne części jak u figurki).
-##
+## Postać stoi stopami w (0, 0, 0) i patrzy w -Z (jak Player).
 ## Stan ustawia Player co klatkę: update_state(...) - model sam wybiera animację.
 
 const VARIANTS: Array[Dictionary] = [
-	{"name": "Rudy", "skin": Color(0.96, 0.78, 0.64), "shirt": Color(0.95, 0.5, 0.12), "pants": Color(0.95, 0.5, 0.12),
-		"shoes": Color(0.25, 0.18, 0.12), "gloves": Color(0.98, 0.82, 0.2), "hat": "cap", "hat_color": Color(0.85, 0.15, 0.15),
-		"hair": Color(0.8, 0.35, 0.12), "extras": ["freckles"], "scale": Vector3(1.0, 1.0, 1.0)},
-	{"name": "Zenek", "skin": Color(0.9, 0.7, 0.58), "shirt": Color(0.2, 0.35, 0.7), "pants": Color(0.25, 0.3, 0.42),
-		"shoes": Color(0.15, 0.15, 0.17), "gloves": Color(0.45, 0.3, 0.2), "hat": "beanie", "hat_color": Color(0.55, 0.55, 0.58),
-		"hair": Color(0.2, 0.15, 0.1), "extras": ["mustache", "belly"], "scale": Vector3(1.08, 0.97, 1.08)},
-	{"name": "Ola", "skin": Color(0.98, 0.84, 0.72), "shirt": Color(0.75, 0.95, 0.15), "pants": Color(0.2, 0.22, 0.26),
-		"shoes": Color(0.6, 0.3, 0.15), "gloves": Color(0.3, 0.3, 0.32), "hat": "helmet", "hat_color": Color(1.0, 0.82, 0.1),
-		"hair": Color(0.45, 0.25, 0.12), "extras": ["ponytail", "vest_stripes"], "scale": Vector3(0.95, 0.98, 0.95)},
-	{"name": "Bonzo", "skin": Color(0.62, 0.42, 0.3), "shirt": Color(0.5, 0.25, 0.7), "pants": Color(0.5, 0.25, 0.7),
-		"shoes": Color(0.95, 0.95, 0.95), "gloves": Color(0.95, 0.95, 0.95), "hat": "bucket", "hat_color": Color(0.85, 0.78, 0.6),
-		"hair": Color(0.1, 0.08, 0.07), "extras": ["sunglasses", "stripes"], "scale": Vector3(1.0, 1.03, 1.0)},
-	{"name": "Wiesiek", "skin": Color(0.94, 0.76, 0.66), "shirt": Color(0.5, 0.52, 0.5), "pants": Color(0.4, 0.42, 0.4),
-		"shoes": Color(0.3, 0.2, 0.12), "gloves": Color(0.75, 0.6, 0.4), "hat": "none", "hat_color": Color(0, 0, 0),
-		"hair": Color(0.75, 0.72, 0.68), "extras": ["beard", "bald"], "scale": Vector3(1.0, 1.06, 1.0)},
-	{"name": "Kaśka", "skin": Color(0.85, 0.64, 0.5), "shirt": Color(0.9, 0.2, 0.4), "pants": Color(0.18, 0.32, 0.6),
-		"shoes": Color(0.9, 0.9, 0.92), "gloves": Color(0.2, 0.6, 0.55), "hat": "headband", "hat_color": Color(0.2, 0.75, 0.7),
-		"hair": Color(0.12, 0.08, 0.06), "extras": ["bun"], "scale": Vector3(0.94, 0.96, 0.94)},
+	{"name": "Bartek", "mesh": "res://assets/characters/bartek.res"},
+	{"name": "Ola", "mesh": "res://assets/characters/ola.res"},
+	{"name": "Dawid", "mesh": "res://assets/characters/dawid.res"},
 ]
 
-## Kości: nazwa, rodzic, położenie względem rodzica (pozycja spoczynkowa, "T" bez rotacji).
+## Kości: nazwa, rodzic, położenie względem rodzica (poza spoczynkowa bez rotacji).
 const BONES: Array = [
 	["Root", "", Vector3.ZERO],
-	["Hips", "Root", Vector3(0, 0.95, 0)],
-	["Spine", "Hips", Vector3(0, 0.15, 0)],
-	["Chest", "Spine", Vector3(0, 0.25, 0)],
-	["Neck", "Chest", Vector3(0, 0.2, 0)],
+	["Hips", "Root", Vector3(0, 0.72, 0)],
+	["Spine", "Hips", Vector3(0, 0.2, 0)],
+	["Chest", "Spine", Vector3(0, 0.22, 0)],
+	["Neck", "Chest", Vector3(0, 0.22, 0)],
 	["Head", "Neck", Vector3(0, 0.08, 0)],
-	["UpperArm.L", "Chest", Vector3(-0.3, 0.14, 0)],
-	["LowerArm.L", "UpperArm.L", Vector3(0, -0.28, 0)],
-	["Hand.L", "LowerArm.L", Vector3(0, -0.25, 0)],
-	["UpperArm.R", "Chest", Vector3(0.3, 0.14, 0)],
-	["LowerArm.R", "UpperArm.R", Vector3(0, -0.28, 0)],
-	["Hand.R", "LowerArm.R", Vector3(0, -0.25, 0)],
-	["UpperLeg.L", "Hips", Vector3(-0.13, -0.05, 0)],
-	["LowerLeg.L", "UpperLeg.L", Vector3(0, -0.42, 0)],
-	["Foot.L", "LowerLeg.L", Vector3(0, -0.4, 0)],
-	["UpperLeg.R", "Hips", Vector3(0.13, -0.05, 0)],
-	["LowerLeg.R", "UpperLeg.R", Vector3(0, -0.42, 0)],
-	["Foot.R", "LowerLeg.R", Vector3(0, -0.4, 0)],
+	["UpperArm.L", "Chest", Vector3(-0.31, 0.15, 0)],
+	["LowerArm.L", "UpperArm.L", Vector3(-0.05, -0.26, 0)],
+	["Hand.L", "LowerArm.L", Vector3(-0.03, -0.22, 0)],
+	["UpperArm.R", "Chest", Vector3(0.31, 0.15, 0)],
+	["LowerArm.R", "UpperArm.R", Vector3(0.05, -0.26, 0)],
+	["Hand.R", "LowerArm.R", Vector3(0.03, -0.22, 0)],
+	["UpperLeg.L", "Hips", Vector3(-0.14, -0.04, 0)],
+	["LowerLeg.L", "UpperLeg.L", Vector3(0, -0.3, 0)],
+	["Foot.L", "LowerLeg.L", Vector3(0, -0.27, 0)],
+	["UpperLeg.R", "Hips", Vector3(0.14, -0.04, 0)],
+	["LowerLeg.R", "UpperLeg.R", Vector3(0, -0.3, 0)],
+	["Foot.R", "LowerLeg.R", Vector3(0, -0.27, 0)],
 ]
-const HIPS_REST: Vector3 = Vector3(0, 0.95, 0)
+const HIPS_REST: Vector3 = Vector3(0, 0.72, 0)
 
 ## Prędkość [m/s], przy której animacja chodu ma tempo 1.0, i próg biegu.
-const WALK_ANIM_SPEED: float = 3.6
-const RUN_ANIM_SPEED: float = 6.5
+const WALK_ANIM_SPEED: float = 3.2
+const RUN_ANIM_SPEED: float = 6.0
 const RUN_THRESHOLD: float = 5.6
 
 var variant: int = 0
@@ -65,16 +49,13 @@ var skeleton: Skeleton3D
 var anim: AnimationPlayer
 
 var _mesh_instance: MeshInstance3D
-var _bone_global: Dictionary = {}  ## nazwa -> pozycja spoczynkowa w układzie postaci
 var _state: String = ""
 
 
 func setup(variant_index: int) -> void:
 	variant = posmod(variant_index, VARIANTS.size())
-	var v: Dictionary = VARIANTS[variant]
-	scale = v["scale"]
 	_build_skeleton()
-	_build_mesh(v)
+	_build_mesh(VARIANTS[variant]["mesh"])
 	_build_animations()
 	play_state("idle")
 
@@ -107,7 +88,7 @@ func update_state(speed: float, crouch: float, on_floor: bool, down: bool, holdi
 	play_state(state)
 	match state:
 		"walk", "carry_walk", "crouch_walk":
-			anim.speed_scale = clampf(speed / (WALK_ANIM_SPEED * (0.5 if state == "crouch_walk" else 1.0)), 0.5, 1.7)
+			anim.speed_scale = clampf(speed / (WALK_ANIM_SPEED * (0.5 if state == "crouch_walk" else 1.0)), 0.5, 1.8)
 		"run":
 			anim.speed_scale = clampf(speed / RUN_ANIM_SPEED, 0.8, 1.4)
 		_:
@@ -118,10 +99,8 @@ func play_state(state: String) -> void:
 	if state == _state:
 		return
 	_state = state
-	anim.play(state, 0.18)
+	anim.play(state, 0.2)
 
-
-# --- Szkielet ----------------------------------------------------------------------
 
 func _build_skeleton() -> void:
 	skeleton = Skeleton3D.new()
@@ -132,154 +111,26 @@ func _build_skeleton() -> void:
 		if b[1] != "":
 			skeleton.set_bone_parent(idx, skeleton.find_bone(b[1]))
 		skeleton.set_bone_rest(idx, Transform3D(Basis.IDENTITY, b[2]))
-		_bone_global[b[0]] = (_bone_global.get(b[1], Vector3.ZERO) as Vector3) + (b[2] as Vector3)
 	skeleton.reset_bone_poses()
 
 
-# --- Siatka ---------------------------------------------------------------------------
-
-func _build_mesh(v: Dictionary) -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var skin: Color = v["skin"]
-	var shirt: Color = v["shirt"]
-	var pants: Color = v["pants"]
-	var shoes: Color = v["shoes"]
-	var gloves: Color = v["gloves"]
-	var extras: Array = v["extras"]
-	var dark := Color(0.08, 0.08, 0.1)
-
-	# Tułów
-	_box(st, "Hips", Vector3(0, 0.94, 0), Vector3(0.44, 0.24, 0.3), pants)
-	var belly: bool = "belly" in extras
-	_box(st, "Spine", Vector3(0, 1.14, 0), Vector3(0.46, 0.26, 0.32), shirt)
-	if belly:
-		_sphere(st, "Spine", Vector3(0, 1.12, -0.1), Vector3(0.3, 0.26, 0.24), shirt)
-	_box(st, "Chest", Vector3(0, 1.38, 0), Vector3(0.54, 0.3, 0.34), shirt)
-	if "vest_stripes" in extras:
-		for y: float in [1.2, 1.36]:
-			_box(st, "Chest" if y > 1.3 else "Spine", Vector3(0, y, -0.005), Vector3(0.56, 0.04, 0.35), Color(0.85, 0.88, 0.9))
-	if "stripes" in extras:
-		for x: float in [-0.29, 0.29]:
-			_box(st, "Chest", Vector3(x, 1.38, 0), Vector3(0.02, 0.28, 0.35), Color(0.95, 0.95, 0.95))
-	_cylinder(st, "Neck", Vector3(0, 1.57, 0), 0.08, 0.1, skin)
-
-	# Głowa (duża, lekko spłaszczona kula)
-	var head_c := Vector3(0, 1.78, 0)
-	_sphere(st, "Head", head_c, Vector3(0.42, 0.4, 0.4), skin)
-	_sphere(st, "Head", head_c + Vector3(0, -0.03, -0.2), Vector3(0.08, 0.07, 0.08), skin.darkened(0.08))   # nos
-	for side: float in [-1.0, 1.0]:
-		_sphere(st, "Head", head_c + Vector3(0.08 * side, 0.05, -0.185), Vector3(0.05, 0.06, 0.03), dark)   # oczy
-		_sphere(st, "Head", head_c + Vector3(0.205 * side, 0.0, 0), Vector3(0.05, 0.08, 0.06), skin)        # uszy
-	if "sunglasses" in extras:
-		_box(st, "Head", head_c + Vector3(0, 0.05, -0.19), Vector3(0.3, 0.07, 0.04), dark)
-	if "freckles" in extras:
-		for p: Vector2 in [Vector2(-0.11, -0.01), Vector2(-0.07, -0.03), Vector2(0.11, -0.01), Vector2(0.07, -0.03)]:
-			_sphere(st, "Head", head_c + Vector3(p.x, p.y, -0.19), Vector3(0.018, 0.018, 0.01), Color(0.75, 0.45, 0.3))
-	if "mustache" in extras:
-		_box(st, "Head", head_c + Vector3(0, -0.09, -0.19), Vector3(0.18, 0.04, 0.04), v["hair"])
-	if "beard" in extras:
-		_sphere(st, "Head", head_c + Vector3(0, -0.13, -0.11), Vector3(0.3, 0.24, 0.2), v["hair"])
-	var hair: Color = v["hair"]
-	if not ("bald" in extras):
-		_sphere(st, "Head", head_c + Vector3(0, 0.12, 0.06), Vector3(0.42, 0.3, 0.38), hair)  # czupryna: góra i tył głowy
-	if "ponytail" in extras:
-		_sphere(st, "Head", head_c + Vector3(0, 0.0, 0.22), Vector3(0.1, 0.22, 0.1), hair)
-	if "bun" in extras:
-		_sphere(st, "Head", head_c + Vector3(0, 0.2, 0.12), Vector3(0.14, 0.14, 0.14), hair)
-	_build_hat(st, v["hat"], v["hat_color"], head_c)
-
-	# Ręce
-	for side: String in ["L", "R"]:
-		var sx: float = -1.0 if side == "L" else 1.0
-		_capsule(st, "UpperArm." + side, Vector3(0.31 * sx, 1.37, 0), 0.08, 0.34, shirt)
-		_capsule(st, "LowerArm." + side, Vector3(0.31 * sx, 1.11, 0), 0.07, 0.3, skin)
-		_sphere(st, "Hand." + side, Vector3(0.31 * sx, 0.93, 0), Vector3(0.17, 0.17, 0.17), gloves)
-		# Nogi
-		_capsule(st, "UpperLeg." + side, Vector3(0.13 * sx, 0.7, 0), 0.1, 0.46, pants)
-		_capsule(st, "LowerLeg." + side, Vector3(0.13 * sx, 0.3, 0), 0.09, 0.42, pants.darkened(0.08))
-		_box(st, "Foot." + side, Vector3(0.13 * sx, 0.055, -0.05), Vector3(0.16, 0.11, 0.3), shoes)
-
-	var mesh: ArrayMesh = st.commit()
+func _build_mesh(path: String) -> void:
+	var mesh := (load(path) as ArrayMesh).duplicate() as ArrayMesh
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.9
-	mat.metallic_specular = 0.2
+	mat.vertex_color_is_srgb = true  # kolory z palety są w sRGB
+	mat.roughness = 0.85
+	mat.metallic_specular = 0.25
+	mat.rim_enabled = true  # lekka poświata na krawędziach - "miękki", bajkowy wygląd
+	mat.rim = 0.25
+	mat.rim_tint = 0.6
 	mesh.surface_set_material(0, mat)
-
 	_mesh_instance = MeshInstance3D.new()
 	_mesh_instance.name = "Body"
 	_mesh_instance.mesh = mesh
 	skeleton.add_child(_mesh_instance)
 	_mesh_instance.skeleton = NodePath("..")
 	_mesh_instance.skin = skeleton.create_skin_from_rest_transforms()
-
-
-func _build_hat(st: SurfaceTool, hat: String, color: Color, head_c: Vector3) -> void:
-	match hat:
-		"cap":
-			_sphere(st, "Head", head_c + Vector3(0, 0.13, 0.01), Vector3(0.44, 0.28, 0.43), color)
-			_box(st, "Head", head_c + Vector3(0, 0.13, -0.25), Vector3(0.3, 0.03, 0.18), color.darkened(0.15))
-		"beanie":
-			_sphere(st, "Head", head_c + Vector3(0, 0.14, 0.01), Vector3(0.44, 0.3, 0.43), color)
-			_sphere(st, "Head", head_c + Vector3(0, 0.3, 0.01), Vector3(0.1, 0.1, 0.1), color.lightened(0.3))
-		"helmet":
-			_sphere(st, "Head", head_c + Vector3(0, 0.15, 0.0), Vector3(0.46, 0.3, 0.46), color)
-			_cylinder(st, "Head", head_c + Vector3(0, 0.12, 0.0), 0.25, 0.03, color.darkened(0.1))
-		"bucket":
-			_cylinder(st, "Head", head_c + Vector3(0, 0.2, 0.0), 0.2, 0.18, color)
-			_cylinder(st, "Head", head_c + Vector3(0, 0.13, 0.0), 0.3, 0.03, color.darkened(0.1))
-		"headband":
-			_cylinder(st, "Head", head_c + Vector3(0, 0.12, 0.0), 0.2, 0.06, color)
-
-
-func _add(st: SurfaceTool, bone: String, arrays: Array, xform: Transform3D, color: Color) -> void:
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var normal_basis: Basis = xform.basis.inverse().transposed()  # poprawne normalne przy skalowaniu
-	var bones := PackedInt32Array([skeleton.find_bone(bone), 0, 0, 0])
-	var weights := PackedFloat32Array([1.0, 0.0, 0.0, 0.0])
-	for i in range(0, idx.size(), 3):
-		for k in 3:
-			st.set_normal((normal_basis * normals[idx[i + k]]).normalized())
-			st.set_color(color)
-			st.set_bones(bones)
-			st.set_weights(weights)
-			st.add_vertex(xform * verts[idx[i + k]])
-
-
-func _box(st: SurfaceTool, bone: String, center: Vector3, size: Vector3, color: Color) -> void:
-	var m := BoxMesh.new()
-	m.size = size
-	_add(st, bone, m.get_mesh_arrays(), Transform3D(Basis.IDENTITY, center), color)
-
-
-func _sphere(st: SurfaceTool, bone: String, center: Vector3, size: Vector3, color: Color) -> void:
-	var m := SphereMesh.new()
-	m.radius = 0.5
-	m.height = 1.0
-	m.radial_segments = 14
-	m.rings = 8
-	_add(st, bone, m.get_mesh_arrays(), Transform3D(Basis.from_scale(size), center), color)
-
-
-func _capsule(st: SurfaceTool, bone: String, center: Vector3, radius: float, height: float, color: Color) -> void:
-	var m := CapsuleMesh.new()
-	m.radius = radius
-	m.height = height
-	m.radial_segments = 10
-	m.rings = 4
-	_add(st, bone, m.get_mesh_arrays(), Transform3D(Basis.IDENTITY, center), color)
-
-
-func _cylinder(st: SurfaceTool, bone: String, center: Vector3, radius: float, height: float, color: Color) -> void:
-	var m := CylinderMesh.new()
-	m.top_radius = radius
-	m.bottom_radius = radius
-	m.height = height
-	m.radial_segments = 14
-	_add(st, bone, m.get_mesh_arrays(), Transform3D(Basis.IDENTITY, center), color)
 
 
 # --- Animacje ----------------------------------------------------------------------------
@@ -423,22 +274,22 @@ func _anim_crouch(walking: bool) -> Animation:
 	base["LowerLeg.R"] = [[0.0, Vector3(knee, 0, 0)]]
 	base["Foot.L"] = [[0.0, Vector3(foot, 0, 0)]]
 	base["Foot.R"] = [[0.0, Vector3(foot, 0, 0)]]
-	return _make(L, base, [[0.0, Vector3(0, -0.4, 0)]])
+	return _make(L, base, [[0.0, Vector3(0, -0.27, 0)]])
 
 
-## Siedzenie: biodra na wysokości 0,25 m nad punktem postaci (tak ustawia Van.seat_transform).
+## Siedzenie: staw biodrowy na wysokości siedziska, 0,25 m nad punktem postaci (Van.seat_transform).
 func _anim_sit() -> Animation:
 	return _make(2.0, {
 		"UpperLeg.L": [[0.0, Vector3(88, 0, -4)]],
 		"UpperLeg.R": [[0.0, Vector3(88, 0, 4)]],
-		"LowerLeg.L": [[0.0, Vector3(-85, 0, 0)]],
-		"LowerLeg.R": [[0.0, Vector3(-85, 0, 0)]],
+		"LowerLeg.L": [[0.0, Vector3(-78, 0, 0)]],
+		"LowerLeg.R": [[0.0, Vector3(-78, 0, 0)]],
 		"UpperArm.L": [[0.0, Vector3(40, 0, -6)]],
 		"UpperArm.R": [[0.0, Vector3(40, 0, 6)]],
 		"LowerArm.L": [[0.0, Vector3(45, 0, 0)]],
 		"LowerArm.R": [[0.0, Vector3(45, 0, 0)]],
 		"Head": _cycle(3.0, [Vector3(0, 4, 0), Vector3(0, -4, 0)]),
-	}, [[0.0, Vector3(0, 0.25 - HIPS_REST.y, 0.05)]])
+	}, [[0.0, Vector3(0, 0.29 - HIPS_REST.y, 0.05)]])
 
 
 func _anim_jump() -> Animation:
