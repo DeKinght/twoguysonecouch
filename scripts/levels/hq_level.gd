@@ -43,9 +43,9 @@ const COL_PAINT: Color = Color(1.0, 0.85, 0.2)
 const RACK_FILL: float = 0.28
 ## Jak często zamiast pustego miejsca na regale stoi drobiazg (0..1).
 const RACK_DECOR: float = 0.18
-## Dekoracje mają losową wielkość z tego zakresu (1.0 = 100 %).
-const DECOR_SCALE_MIN: float = 1.0
-const DECOR_SCALE_MAX: float = 1.4
+## Dekoracje mają losową wielkość z tego zakresu (1.0 = 100 %, 2.0 = 200 %).
+const DECOR_SCALE_MIN: float = 1.4
+const DECOR_SCALE_MAX: float = 2.0
 
 ## Kolor świetlówek (ciepły, żółtawy) i ich losowe mruganie.
 const LAMP_COLOR: Color = Color(1.0, 0.82, 0.52)
@@ -382,13 +382,13 @@ func _build_toilet() -> void:
 ## rośliny, pachołki przy miejscu na busa, kula dyskotekowa nad kanapą.
 func _build_decor() -> void:
 	# Warsztat: narzędzia na blacie (y 0,96) i na dolnej półce (y 0,24).
-	_decor("tool_hammer", Vector3(10.25, 0.96, 8.05), 0.3)
-	_decor("tool_wrench", Vector3(10.3, 0.96, 8.5), -0.4)
-	_decor("tool_screwdriver", Vector3(10.15, 0.96, 8.85), 0.2)
-	_decor("tool_drill", Vector3(10.3, 0.96, 9.3), PI)
+	_decor("tool_hammer", Vector3(10.2, 0.96, 8.25), 0.3)
+	_decor("tool_wrench", Vector3(10.3, 0.96, 8.75), -0.4)
+	_decor("tool_screwdriver", Vector3(10.2, 0.96, 9.15), 0.2)
+	_decor("tool_drill", Vector3(10.3, 0.96, 9.45), PI)
 	_decor("tool_tape_measure", Vector3(10.55, 0.96, 7.95), 0.5)
-	_decor("thermos", Vector3(10.62, 0.96, 9.0), 0.0)
-	_decor("hard_hat", Vector3(10.3, 0.96, 10.3), 0.6)
+	_decor("thermos", Vector3(10.65, 0.96, 8.45), 0.0)
+	_decor("hard_hat", Vector3(10.32, 0.96, 10.35), 0.6)
 	_decor("tool_saw", Vector3(10.25, 0.24, 9.9), PI / 2.0)
 	_decor("paint_can_red", Vector3(9.98, 0.24, 7.3), 0.0)
 	_decor("paint_can_blue", Vector3(10.45, 0.24, 7.35), 1.0)
@@ -413,7 +413,7 @@ func _build_decor() -> void:
 	_decor("pizza_boxes", Vector3(11.2, 0.0, 2.7), 0.4)            # obok kanapy
 	_decor("dumbbell", Vector3(7.95, 0.0, 4.45), 1.2)
 	_decor("garden_gnome", Vector3(4.55, 0.0, 0.4), 0.3)           # pilnuje drzwi do WC
-	var ball_scale: float = _rng.randf_range(DECOR_SCALE_MIN, DECOR_SCALE_MAX)
+	var ball_scale: float = _rng.randf_range(1.0, 1.3)  # większa wisiałaby za nisko nad głowami
 	# Kula (0,34 m) + sznurek (0,8 m), oba w skali - sznurek ma sięgać sufitu. Wisi, aż ktoś ją zerwie.
 	_decor("disco_ball", Vector3(9.6, WALL_H - 1.14 * ball_scale, 2.3), 0.0, true, ball_scale)
 

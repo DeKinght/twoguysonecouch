@@ -14,9 +14,10 @@ const ALL: Array[String] = [
 	"rubik_cube", "photo_frame", "disco_ball", "thermos",
 ]
 
-## Drobiazgi, które mieszczą się na półkach regałów (losowane między kartony).
+## Drobiazgi, które mieszczą się na półkach regałów nawet w skali 200 % (bez lampy lava,
+## krasnala i kręgla - za wysokie) - losowane między kartony.
 const SHELF_TRINKETS: Array[String] = [
-	"duck_rubber", "globe", "trophy", "mug", "alarm_clock", "lava_lamp", "garden_gnome", "bowling_pin",
+	"duck_rubber", "globe", "trophy", "mug", "alarm_clock",
 	"snow_globe", "piggy_bank", "book_stack", "rubik_cube", "photo_frame", "thermos",
 	"plant_succulent", "plant_cactus", "paint_can_red", "paint_can_blue", "hard_hat", "tool_drill",
 ]
