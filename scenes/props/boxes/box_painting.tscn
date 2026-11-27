@@ -5,7 +5,7 @@
 [node name="box_painting" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(1.0, 0.74, 0.12)
-marker_text = "OBRAZ\nNIE ZGINAĆ!"
+marker_text = "PAINTING\nDO NOT BEND!"
 handles = false
 tape = 2
 variant_seed = 4

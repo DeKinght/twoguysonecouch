@@ -5,6 +5,6 @@
 [node name="box_books" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.36, 0.3, 0.3)
-marker_text = "KSIĄŻKI\nCIĘŻKIE!"
+marker_text = "BOOKS\nHEAVY!"
 tape = 2
 variant_seed = 1

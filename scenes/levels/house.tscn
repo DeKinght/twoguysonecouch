@@ -476,7 +476,7 @@ material = SubResource("Mat_cargo")
 [node name="TruckLabel" type="Label3D" parent="Truck"]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.32, 1.6, 2.3)
 pixel_size = 0.01
-text = "PRZEPROWADZKI"
+text = "MOVING CO."
 modulate = Color(0.15, 0.15, 0.15, 1)
 font_size = 48
 outline_size = 0
@@ -575,7 +575,7 @@ mass = 5
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.4, 0.311, 5.7)
 item_name = "Karton (szkło)"
 model = ExtResource("21_r")
-label_text = "SZKŁO"
+label_text = "FRAGILE"
 value = 250
 durability = 25
 mass = 5

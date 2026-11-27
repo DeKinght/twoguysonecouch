@@ -193,16 +193,9 @@ func _capsule(r: float, h: float, pos: Vector3, mat: Material, rot: Vector3 = Ve
 	return _add(m, pos, mat, rot)
 
 
-func _label(text: String, pos: Vector3, c: Color, pixel: float, rot: Vector3 = Vector3.ZERO) -> void:
-	var label := Label3D.new()
-	label.text = text
-	label.font_size = 48
-	label.outline_size = 0
-	label.pixel_size = pixel
-	label.modulate = c
-	label.shaded = true
-	label.double_sided = false
-	label.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+## Napis dopasowany do prostokąta max_w x max_h [m] na powierzchni przedmiotu (patrz TextFit).
+func _label(text: String, pos: Vector3, c: Color, max_w: float, max_h: float, rot: Vector3 = Vector3.ZERO) -> void:
+	var label: Label3D = TextFit.make(text, max_w, max_h, c)
 	label.position = pos
 	label.rotation = rot
 	label.set_meta("generated", true)
@@ -393,7 +386,7 @@ func _globe() -> void:
 func _trophy() -> void:
 	var gold: Material = _mat(Color(0.95, 0.75, 0.22), 0.9, 0.25)
 	_box(Vector3(0.1, 0.05, 0.1), Vector3(0, 0.025, 0), _wood(0.6))
-	_label("MISTRZ\nNOSZENIA", Vector3(0, 0.025, 0.051), Color(0.95, 0.8, 0.35), 0.0006)
+	_label("BEST\nMOVER", Vector3(0, 0.025, 0.0515), Color(0.95, 0.8, 0.35), 0.082, 0.036)
 	_cyl(0.012, 0.022, 0.06, Vector3(0, 0.08, 0), gold)
 	_cyl(0.062, 0.026, 0.1, Vector3(0, 0.16, 0), gold)
 	for side: float in [-1.0, 1.0]:
@@ -407,7 +400,8 @@ func _mug() -> void:
 	_cyl(0.04, 0.038, 0.095, Vector3(0, 0.0475, 0), c)
 	_cyl(0.036, 0.036, 0.004, Vector3(0, 0.088, 0), _mat(Color(0.3, 0.17, 0.08), 0, 0.2))
 	_torus(0.02, 0.029, Vector3(0.046, 0.05, 0), c, Vector3(PI / 2.0, 0, 0))
-	_label("#1 TRAGARZ", Vector3(0, 0.05, 0.041), Color(0.1, 0.1, 0.1), 0.0005)
+	# Płaski napis na zaokrąglonym kubku: wąski, żeby nie odstawał poza obrys.
+	_label("#1\nMOVER", Vector3(0, 0.05, 0.0405), Color(0.1, 0.1, 0.1), 0.042, 0.045)
 
 
 func _alarm_clock() -> void:
@@ -505,7 +499,7 @@ func _pizza_boxes() -> void:
 		_box(Vector3(0.34, 0.04, 0.34), Vector3(0, 0.02 + i * 0.041, 0), card, rot)
 	var top: float = 3 * 0.041
 	_box(Vector3(0.26, 0.002, 0.06), Vector3(0, top + 0.001, -0.08), _mat(Color(0.85, 0.15, 0.1)))
-	_label("PIZZA", Vector3(0, top + 0.003, -0.08), Color.WHITE, 0.0012, Vector3(-PI / 2.0, 0, 0))
+	_label("PIZZA", Vector3(0, top + 0.003, -0.08), Color.WHITE, 0.24, 0.045, Vector3(-PI / 2.0, 0, 0))
 	_cyl(0.05, 0.05, 0.002, Vector3(0.07, top + 0.001, 0.07), _mat(Color(0.75, 0.6, 0.4), 0, 0.3))  # tłusta plama
 
 
@@ -569,7 +563,9 @@ func _photo_frame() -> void:
 func _disco_ball() -> void:
 	var length: float = 0.8
 	var r: float = 0.17
-	_cyl(0.002, 0.002, length, Vector3(0, r * 2.0 + length * 0.5, 0), _dark(), Vector3.ZERO, 4)
+	# Sznurek nie liczy się do hitboxa (inaczej kula miałaby 1 m wysokości "powietrza").
+	_cyl(0.002, 0.002, length, Vector3(0, r * 2.0 + length * 0.5, 0), _dark(), Vector3.ZERO, 4) \
+			.set_meta("skip_bounds", true)
 	_sphere(r, Vector3(0, r, 0), _mat(Color(0.88, 0.88, 0.92), 1.0, 0.05, 0.15))
 	# "Lustereczka": pierścienie płytek wokół kuli.
 	for ring in 5:

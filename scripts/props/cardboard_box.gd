@@ -11,12 +11,12 @@ extends Node3D
 ##
 ## Opcjonalne zasoby (podpinają się same, jeśli istnieją):
 ##   res://assets/textures/cardboard.(jpg|png)  tekstura tektury (bezszwowa)
-##   res://assets/ui/fonts/marker.ttf           czcionka "flamastra" do odręcznych napisów
+##   czcionki napisów: patrz TextFit (assets/ui/fonts/label.ttf, marker.ttf)
 
 enum Tape { NONE, STRIP, CROSS, MESSY }
 
 const CARDBOARD_TEXTURE: String = "res://assets/textures/cardboard"
-const MARKER_FONT: String = "res://assets/ui/fonts/marker.ttf"
+
 const BASE_TINT: Color = Color(0.74, 0.56, 0.36)
 
 @export var size: Vector3 = Vector3(0.5, 0.4, 0.4)
@@ -236,7 +236,7 @@ func _build_arrows() -> void:
 			_mesh_instance(head, Vector3(x, base_y + a * 0.72, dz), ink, Vector3(0, PI / 2.0, 0))
 		_mesh(Vector3(0.003, a * 0.07, a * 1.1), Vector3(x, base_y - a * 0.08, 0), ink)
 	if d > 0.2 and print_text == "":
-		_label("TĄ STRONĄ\nDO GÓRY", Vector3(0, h * 0.35, d * 0.5 + 0.002), Vector3.ZERO, print_color, w * 0.7, h * 0.3, false)
+		_label("THIS SIDE\nUP", Vector3(0, h * 0.35, d * 0.5 + 0.002), Vector3.ZERO, print_color, w * 0.7, h * 0.3, false)
 
 
 ## Etykieta kurierska z kodem kreskowym na przodzie, w prawym dolnym rogu.
@@ -261,7 +261,7 @@ func _build_shipping_label() -> void:
 				Vector3(center.x - lw * 0.42 + line_w * 0.5, center.y + lh * (0.3 - i * 0.13), center.z + 0.0015), grey)
 
 
-## Czerwone naklejki "SZKŁO" na przodzie i na górze.
+## Czerwone naklejki "FRAGILE!" na przodzie i na górze.
 func _build_fragile() -> void:
 	var w: float = size.x
 	var h: float = size.y
@@ -271,11 +271,11 @@ func _build_fragile() -> void:
 	var sh: float = minf(0.09, h * 0.22)
 	var front := Vector3(-w * 0.5 + sw * 0.62, h * 0.8, d * 0.5 + 0.0012)
 	_mesh(Vector3(sw, sh, 0.002), front, red)
-	_label("SZKŁO!", front + Vector3(0, 0, 0.0016), Vector3.ZERO, Color.WHITE, sw * 0.85, sh * 0.7, false)
+	_label("FRAGILE!", front + Vector3(0, 0, 0.0016), Vector3.ZERO, Color.WHITE, sw * 0.85, sh * 0.7, false)
 	if not open_top:
 		var top := Vector3(w * 0.5 - sw * 0.6, size.y + 0.0012, d * 0.5 - sh * 0.7)
 		_mesh(Vector3(sw, 0.002, sh), top, red, Vector3(0, 0.15, 0))
-		_label("SZKŁO!", top + Vector3(0, 0.0016, 0), Vector3(-PI / 2.0, 0.15, 0), Color.WHITE, sw * 0.85, sh * 0.7, false)
+		_label("FRAGILE!", top + Vector3(0, 0.0016, 0), Vector3(-PI / 2.0, 0.15, 0), Color.WHITE, sw * 0.85, sh * 0.7, false)
 
 
 ## Przetarcia i plamy na starych kartonach.
@@ -338,25 +338,12 @@ func _mesh_instance(mesh: Mesh, pos: Vector3, material: Material, rot: Vector3 =
 	return mi
 
 
+## Napis dopasowany do prostokąta max_w x max_h na ściance (rozmiar z prawdziwych
+## wymiarów tekstu w czcionce - patrz TextFit). Przechylony napis dostaje zapas 12 %,
+## żeby rogi nie wyszły poza ściankę.
 func _label(text: String, pos: Vector3, rot: Vector3, color: Color, max_w: float, max_h: float, marker: bool) -> void:
-	var label := Label3D.new()
-	label.text = text
-	label.font_size = 64
-	label.outline_size = 0
-	label.modulate = color
-	label.shaded = true
-	label.double_sided = false
-	label.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if marker and ResourceLoader.exists(MARKER_FONT):
-		label.font = load(MARKER_FONT) as Font
-	var lines: PackedStringArray = text.split("\n")
-	var longest: int = 1
-	for line in lines:
-		longest = maxi(longest, line.length())
-	var px_w: float = longest * 64.0 * 0.62
-	var px_h: float = lines.size() * 64.0 * 1.25
-	label.pixel_size = minf(max_w / px_w, max_h / px_h)
+	var tilt_margin: float = 0.88 if absf(rot.z) > 0.01 or (absf(rot.x) > 0.01 and absf(rot.y) > 0.01) else 1.0
+	var label: Label3D = TextFit.make(text, max_w * tilt_margin, max_h * tilt_margin, color, marker)
 	label.position = pos
 	label.rotation = rot
 	label.set_meta("generated", true)

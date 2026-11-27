@@ -5,7 +5,7 @@
 [node name="box_wardrobe" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.6, 1.3, 0.5)
-print_text = "SZAFA\nNA UBRANIA"
+print_text = "WARDROBE\nBOX"
 this_side_up = true
 tape = 1
 variant_seed = 5

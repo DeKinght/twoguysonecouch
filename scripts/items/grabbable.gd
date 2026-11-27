@@ -24,6 +24,11 @@ extends RigidBody3D
 @export var color: Color = Color(0.72, 0.55, 0.35)
 ## Napis na ściankach (np. "SZKŁO"). Puste = brak.
 @export var label_text: String = ""
+## Pozycja węzła to środek PODSTAWY (a nie środek bryły) - w _ready przesuwamy się
+## w górę o pół wysokości modelu. Wygodne przy stawianiu rzeczy na blatach i półkach.
+@export var spawn_from_bottom: bool = false
+## Przyczepiony (np. półka na ścianie, kula pod sufitem): nie spada, dopóki ktoś go nie złapie.
+@export var start_frozen: bool = false
 
 @export_group("Szkody")
 ## Wartość w zł - spada przy uderzeniach.
@@ -89,6 +94,8 @@ func _ready() -> void:
 			_build_from_model()
 		else:
 			_build_placeholder()
+	if spawn_from_bottom:
+		position.y += size.y * 0.5
 
 	net_position = global_position
 	net_rotation = global_basis.get_rotation_quaternion()
@@ -96,6 +103,8 @@ func _ready() -> void:
 
 	if multiplayer.is_server():
 		Net.peer_left.connect(server_end_hold)
+		if start_frozen:
+			freeze = true  # wisi/stoi przyczepiony, aż ktoś go złapie
 	else:
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 		freeze = true
@@ -178,6 +187,8 @@ func rpc_push(impulse: Vector3) -> void:
 func _server_begin_hold(peer_id: int, local_point: Vector3, target: Vector3) -> void:
 	if _destroyed:
 		return
+	if freeze:
+		freeze = false  # zerwany ze ściany / sufitu
 	holders[peer_id] = {
 		"point": local_point,
 		"target": target,
@@ -439,10 +450,8 @@ func _build_placeholder() -> void:
 func _add_labels() -> void:
 	if label_text != "":
 		for side in [1.0, -1.0]:
-			var label := Label3D.new()
-			label.text = label_text
-			label.pixel_size = 0.004
-			label.modulate = Color(0.1, 0.1, 0.1)
+			# Dopasowany do ścianki (80 % szerokości, 35 % wysokości) - nie wystaje poza nią.
+			var label: Label3D = TextFit.make(label_text, size.x * 0.8, size.y * 0.35, Color(0.1, 0.1, 0.1))
 			label.position = Vector3(0, 0, side * (size.z * 0.5 + 0.005))
 			label.rotation.y = 0.0 if side > 0.0 else PI
 			add_child(label)

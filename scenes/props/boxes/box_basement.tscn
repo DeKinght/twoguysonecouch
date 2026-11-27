@@ -5,7 +5,7 @@
 [node name="box_basement" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.6, 0.5, 0.5)
-marker_text = "PIWNICA\nCIĘŻKIE"
+marker_text = "BASEMENT\nHEAVY"
 tint = Color(0.6, 0.46, 0.3, 1)
 wear = 0.8
 tape = 2

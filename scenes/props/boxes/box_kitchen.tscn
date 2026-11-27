@@ -5,7 +5,7 @@
 [node name="box_kitchen" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.5, 0.42, 0.42)
-marker_text = "KUCHNIA"
-print_text = "EKO-BOX\n40×40"
+marker_text = "KITCHEN"
+print_text = "ECO-BOX\n40x40"
 shipping_label = true
 variant_seed = 2

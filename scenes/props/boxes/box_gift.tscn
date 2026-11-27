@@ -5,7 +5,7 @@
 [node name="box_gift" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.42, 0.34, 0.42)
-marker_text = "NIE OTWIERAĆ\nPRZED ŚWIĘTAMI"
+marker_text = "DO NOT OPEN\nBEFORE XMAS"
 tape = 2
 tape_color = Color(0.75, 0.12, 0.15, 1)
 handles = false

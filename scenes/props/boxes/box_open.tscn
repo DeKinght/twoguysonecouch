@@ -7,6 +7,6 @@ script = ExtResource("1_box")
 size = Vector3(0.5, 0.38, 0.44)
 open_top = true
 contents = true
-marker_text = "RÓŻNE"
+marker_text = "MISC"
 tape = 0
 variant_seed = 7

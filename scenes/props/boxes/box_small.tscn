@@ -5,6 +5,6 @@
 [node name="box_small" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.26, 0.18, 0.24)
-marker_text = "DROBIAZGI"
+marker_text = "SMALL STUFF"
 handles = false
 variant_seed = 9

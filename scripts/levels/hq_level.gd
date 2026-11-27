@@ -43,6 +43,9 @@ const COL_PAINT: Color = Color(1.0, 0.85, 0.2)
 const RACK_FILL: float = 0.28
 ## Jak często zamiast pustego miejsca na regale stoi drobiazg (0..1).
 const RACK_DECOR: float = 0.18
+## Dekoracje mają losową wielkość z tego zakresu (1.0 = 100 %).
+const DECOR_SCALE_MIN: float = 1.0
+const DECOR_SCALE_MAX: float = 1.4
 
 ## Kolor świetlówek (ciepły, żółtawy) i ich losowe mruganie.
 const LAMP_COLOR: Color = Color(1.0, 0.82, 0.52)
@@ -52,21 +55,24 @@ const FLICKER_OFF: float = 0.5
 
 ## Plakaty: [pozycja środka, obrót Y (w stronę pokoju), roboczy tytuł]
 const POSTERS: Array = [
-	[Vector3(4.9, 1.7, 0.12), 0.0, "Podnoś plecami"],
-	[Vector3(9.52, 2.45, 0.12), 0.0, "Dni bez wypadku: 0"],
-	[Vector3(16.2, 2.35, 0.12), 0.0, "Pracownik miesiąca"],
-	[Vector3(19.88, 1.7, 2.8), -PI / 2.0, "Szkło to tylko sugestia"],
-	[Vector3(1.3, 1.7, 10.65), PI, "Poszukiwany: PIVOT"],
-	[Vector3(6.6, 1.7, 10.65), PI, "Schody 2"],
-	[Vector3(2.5, 1.6, 0.12), 0.0, "Toaleta"],
-	[Vector3(4.08, 1.7, 2.45), PI / 2.0, "Twoje plecy należą do firmy"],
-	[Vector3(12.3, 1.7, 6.82), 0.0, "Sklep"],
+	[Vector3(4.9, 1.7, 0.12), 0.0, "Lift with your back"],
+	[Vector3(9.52, 2.45, 0.12), 0.0, "Days without an incident"],
+	[Vector3(16.2, 2.35, 0.12), 0.0, "Employee of the month"],
+	[Vector3(19.88, 1.7, 2.8), -PI / 2.0, "Fragile is just a suggestion"],
+	[Vector3(1.3, 1.7, 10.65), PI, "Wanted: pivot"],
+	[Vector3(6.6, 1.7, 10.65), PI, "The Stairs 2"],
+	[Vector3(2.5, 1.6, 0.12), 0.0, "Restroom"],
+	[Vector3(4.08, 1.7, 2.45), PI / 2.0, "Your back belongs to the company"],
+	[Vector3(12.3, 1.7, 6.82), 0.0, "Shop"],
 ]
 
 var _geo: Node3D
 var _materials: Dictionary = {}
 ## Świetlówki: [OmniLight3D, siatka oprawy] - do mrugania.
 var _lamps: Array = []
+## Dekoracje-przedmioty (Decor1, Decor2... - stałe nazwy dla sieci).
+var _decor_root: Node3D
+var _decor_count: int = 0
 var _rng := RandomNumberGenerator.new()
 
 
@@ -75,6 +81,9 @@ func _ready() -> void:
 	_geo = Node3D.new()
 	_geo.name = "Geometry"
 	add_child(_geo)
+	_decor_root = Node3D.new()
+	_decor_root.name = "Decor"
+	add_child(_decor_root)
 
 	_build_ground()
 	_build_walls()
@@ -236,7 +245,7 @@ func _build_office() -> void:
 	_decor("plant_cactus", Vector3(19.35, top, z + 0.15), 0.0)
 
 	_marker("JobComputer", Vector3(16.45, 0.0, 2.3))
-	_sign("KOMPUTER\nwybór zleceń (wkrótce)", Vector3(16.5, 2.0, 1.4))
+	_sign("COMPUTER\njob board (soon)", Vector3(16.5, 2.0, 1.4))
 
 
 ## Żółte regały dekoracyjne pełne kartonów.
@@ -291,7 +300,8 @@ func _build_garage() -> void:
 				Vector3(line[2] - line[0], 0.01, line[3] - line[1]), COL_PAINT, 0.0, false)
 	_marker("CarSpot", Vector3((x0 + x1) * 0.5, 0.0, (z0 + z1) * 0.5))
 	var floor_label := Label3D.new()
-	floor_label.text = "MIEJSCE NA BUSA"
+	floor_label.text = "VAN PARKING"
+	floor_label.font = TextFit.font(false)
 	floor_label.pixel_size = 0.01
 	floor_label.modulate = Color(COL_PAINT, 0.85)
 	floor_label.rotation = Vector3(-PI / 2.0, PI / 2.0, 0.0)
@@ -319,7 +329,7 @@ func _build_garage() -> void:
 	_aabb(Vector3(9.95, 0.96, 7.1), Vector3(10.45, 1.2, 7.65), Color(0.8, 0.15, 0.12))
 	_aabb(Vector3(10.1, 0.96, 9.7), Vector3(10.4, 1.15, 10.0), Color(0.3, 0.35, 0.42))
 	_marker("Workbench", Vector3(9.2, 0.0, 8.7))
-	_sign("WARSZTAT\nulepszenia busa (wkrótce)", Vector3(10.2, 2.55, 8.7))
+	_sign("WORKSHOP\nvan upgrades (soon)", Vector3(10.2, 2.55, 8.7))
 
 
 ## Sklep: długa drewniana półka z przedmiotami do kupienia (na razie zapychacze).
@@ -347,7 +357,8 @@ func _build_shop() -> void:
 			gi += 1
 			if prop != null:
 				var tag := Label3D.new()
-				tag.text = "??? zł"
+				tag.text = "PRICE ???"
+				tag.font = TextFit.font(false)
 				tag.pixel_size = 0.0025
 				tag.modulate = COL_PAINT
 				tag.rotation.y = PI
@@ -355,7 +366,7 @@ func _build_shop() -> void:
 				_geo.add_child(tag)
 			x += 0.95
 	_marker("Shop", Vector3(15.6, 0.0, 9.0))
-	_sign("SKLEP\n(wkrótce)", Vector3(15.6, 2.4, 9.9))
+	_sign("SHOP\n(soon)", Vector3(15.6, 2.4, 9.9))
 
 
 func _build_toilet() -> void:
@@ -394,27 +405,45 @@ func _build_decor() -> void:
 			[["piggy_bank", -0.35], ["book_stack", 0.0], ["bowling_pin", 0.35]])
 
 	# Podłoga.
-	_decor("plant_monstera", Vector3(11.55, 0.0, 4.3), 0.0, true)        # przy kanapie
-	_decor("plant_fern", Vector3(12.85, 0.0, 6.2), 0.0, true)            # przy drzwiach do sklepu
-	_decor("plant_fern", Vector3(0.42, 0.0, 0.42), 1.0, true)            # w rogu WC
-	_decor("traffic_cone", Vector3(8.3, 0.0, 6.1), 0.3, true)            # przy miejscu na busa
-	_decor("traffic_cone", Vector3(8.3, 0.0, 9.9), -0.2, true)
-	_decor("pizza_boxes", Vector3(11.2, 0.0, 2.7), 0.4, true)            # obok kanapy
-	_decor("dumbbell", Vector3(7.95, 0.0, 4.45), 1.2, true)
-	_decor("garden_gnome", Vector3(4.55, 0.0, 0.4), 0.3, true)           # pilnuje drzwi do WC
-	_decor("disco_ball", Vector3(9.6, WALL_H - 1.14, 2.3), 0.0)          # nad dywanem, wisi z sufitu
+	_decor("plant_monstera", Vector3(11.55, 0.0, 4.3), 0.0)        # przy kanapie
+	_decor("plant_fern", Vector3(12.85, 0.0, 6.2), 0.0)            # przy drzwiach do sklepu
+	_decor("plant_fern", Vector3(0.42, 0.0, 0.42), 1.0)            # w rogu WC
+	_decor("traffic_cone", Vector3(8.3, 0.0, 6.1), 0.3)            # przy miejscu na busa
+	_decor("traffic_cone", Vector3(8.3, 0.0, 9.9), -0.2)
+	_decor("pizza_boxes", Vector3(11.2, 0.0, 2.7), 0.4)            # obok kanapy
+	_decor("dumbbell", Vector3(7.95, 0.0, 4.45), 1.2)
+	_decor("garden_gnome", Vector3(4.55, 0.0, 0.4), 0.3)           # pilnuje drzwi do WC
+	var ball_scale: float = _rng.randf_range(DECOR_SCALE_MIN, DECOR_SCALE_MAX)
+	# Kula (0,34 m) + sznurek (0,8 m), oba w skali - sznurek ma sięgać sufitu. Wisi, aż ktoś ją zerwie.
+	_decor("disco_ball", Vector3(9.6, WALL_H - 1.14 * ball_scale, 2.3), 0.0, true, ball_scale)
 
 
-func _decor(decor_name: String, pos: Vector3, rot_y: float, collide: bool = false) -> Node3D:
-	return _prop(DecorCatalog.path(decor_name), pos, rot_y, 0.0, collide)
+## Dekoracja jako przedmiot do noszenia (bez wartości) w losowej skali 100-140 %.
+## pos = środek podstawy. frozen = przyczepiona (półka, kula), spada dopiero po złapaniu.
+func _decor(decor_name: String, pos: Vector3, rot_y: float, frozen: bool = false, fixed_scale: float = -1.0) -> Grabbable:
+	var s: float = fixed_scale if fixed_scale > 0.0 else _rng.randf_range(DECOR_SCALE_MIN, DECOR_SCALE_MAX)
+	var item := ITEM_SCENE.instantiate() as Grabbable
+	_decor_count += 1
+	item.name = "Decor%d" % _decor_count  # stała nazwa = ta sama ścieżka sieciowa u każdego
+	item.item_name = DecorCatalog.display_name(decor_name)
+	item.model = DecorCatalog.scene(decor_name)
+	item.model_scale = s
+	item.mass = DecorCatalog.mass(decor_name) * s * s * s
+	item.value = 0.0
+	item.spawn_from_bottom = true
+	item.start_frozen = frozen
+	item.position = pos + Vector3(0, 0.005, 0)
+	item.rotation.y = rot_y
+	_decor_root.add_child(item)
+	return item
 
 
-## Półka ścienna (tył przy ścianie) z drobiazgami ustawionymi wzdłuż niej.
+## Półka ścienna (tył przy ścianie, zawsze 100 %, przyczepiona) z drobiazgami ustawionymi wzdłuż niej.
 func _wall_shelf(pos: Vector3, rot_y: float, items: Array) -> void:
-	_decor("wall_shelf", pos, rot_y, true)
+	_decor("wall_shelf", pos, rot_y, true, 1.0)
 	var along := Vector3(cos(rot_y), 0.0, -sin(rot_y))
 	for entry: Array in items:
-		var at: Vector3 = pos + along * float(entry[1]) + Vector3(0, Decor.SHELF_TOP, 0)
+		var at: Vector3 = pos + along * float(entry[1]) + Vector3(0, Decor.SHELF_TOP + 0.01, 0)
 		_decor(entry[0], at, rot_y + _rng.randf_range(-0.3, 0.3))
 
 
@@ -581,7 +610,7 @@ func _rack(x0: float, x1: float, z0: float, z1: float, height: float = 2.2, leve
 						_prop(model, pos, rot, w * 0.92, false)
 					else:  # drobiazg (kaczka, globus, puszka farby...) w prawdziwej skali
 						var trinket: String = DecorCatalog.SHELF_TRINKETS[_rng.randi() % DecorCatalog.SHELF_TRINKETS.size()]
-						_prop(DecorCatalog.path(trinket), pos, _rng.randf_range(0.0, TAU), 0.0, false)
+						_decor(trinket, pos, _rng.randf_range(0.0, TAU))
 				cursor += w + 0.06
 
 
@@ -613,7 +642,7 @@ func _poster(index: int, pos: Vector3, rot_y: float, title: String) -> void:
 	else:
 		mat.albedo_color = Color.from_hsv(fmod(index * 0.13, 1.0), 0.45, 0.75)
 		var label := Label3D.new()
-		label.text = "PLAKAT %d\n%s" % [index, title]
+		label.text = "POSTER %d\n%s" % [index, title]
 		label.pixel_size = 0.004
 		label.position.z = 0.01
 		label.modulate = Color(0.1, 0.08, 0.06)
@@ -686,6 +715,7 @@ func _rpc_flicker(index: int) -> void:
 func _sign(text: String, pos: Vector3) -> void:
 	var label := Label3D.new()
 	label.text = text
+	label.font = TextFit.font(false)
 	label.pixel_size = 0.005
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = UITheme.TAPE

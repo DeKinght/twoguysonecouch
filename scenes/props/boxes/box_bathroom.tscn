@@ -5,7 +5,7 @@
 [node name="box_bathroom" type="Node3D"]
 script = ExtResource("1_box")
 size = Vector3(0.45, 0.45, 0.45)
-marker_text = "ŁAZIENKA"
+marker_text = "BATHROOM"
 tape = 3
 tape_color = Color(0.62, 0.64, 0.66, 1)
 wear = 0.3
