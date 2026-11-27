@@ -66,3 +66,13 @@ Lewy monitor na biurku (`scripts/interact/job_computer.gd`, ekran `ui/computer_s
 do monitora i otwiera się giełda zleceń; Esc lub "Wyloguj" zamyka. Z komputera korzysta jedna osoba naraz
 (stan trzyma host) - pozostali widzą "Komputer zajęty". Zlecenia są w `JobComputer.JOBS` (tytuł, opis, obrazek,
 gwiazdki 0-5). Na czas korzystania gra używa własnego, większego kursora.
+
+## Generator miasta (`scripts/levels/world_generator.gd`)
+Po przyjęciu zlecenia na komputerze host losuje ziarno (`JobComputer.world_seed`) i rozsyła je graczom - każdy
+buduje identyczne miasto wokół Siedziby. Siatka modułów 9 x 9 m (kafel drogi = budynek z podstawą):
+linie ulic co 36/45/54 m, 4 przecznice w każdą stronę; losowo usuwane odcinki ulic (sieć zawsze spójna, bez
+ślepych uliczek); kafle skrzyżowań dobierane do wylotów; budynki frontem do ulic, w głębi kwartałów parki
+i parkingi; obrzeże zabudowane wysokimi budynkami + niewidzialne ściany. Kwartał Siedziby (budynek + 10 m)
+jest zawsze otoczony ulicami, wjazd do garażu łączy się z ulicą przy x = -14,5; wokół działki płot z przerwą
+na wjazd. Dom docelowy (z meblami do zabrania) w losowym kwartale >110 m od Siedziby, ze słupem światła
+i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów zamiast tysięcy).
