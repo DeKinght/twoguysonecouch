@@ -10,26 +10,27 @@ extends VehicleBody3D
 ## hostowi swoje wejście (gaz, skręt, ręczny), host jedzie i rozsyła pozycję, a klienci
 ## tylko interpolują. Miejsca i stan drzwi też zmienia tylko host (gracze proszą RPC).
 ##
-## Wszystko (koła, kolizja, drzwi, półka) budujemy w kodzie z modelu, więc scena
-## pojazdu to tylko ten skrypt na VehicleBody3D.
+## Wszystko (koła, kolizja, drzwi, półka, wnętrze kabiny, szyby, dźwięki) budujemy
+## w kodzie z modelu, więc scena pojazdu to tylko ten skrypt na VehicleBody3D.
 
 const MODEL: PackedScene = preload("res://assets/models/cars/delivery.glb")
-## Skala modelu: 1 jednostka Car Kit = 2,3 m, żeby w pace stanął dorosły (2,3 m wysokości).
-const S: float = 2.3
+## Skala modelu: 1 jednostka Car Kit = 1,84 m (paka 1,84 m wysokości - dorosły się zmieści).
+const S: float = 1.84
+const SOUND_DIR: String = "res://assets/audio/van/"
 
 enum { SEAT_DRIVER, SEAT_PASSENGER, SEAT_BENCH_L, SEAT_BENCH_R }
 const SEAT_COUNT: int = 4
 const SEAT_LABELS: Array[String] = ["za kierownicę", "jako pasażer", "na półkę", "na półkę"]
 
 @export_group("Napęd")
-@export var vehicle_mass: float = 2500.0
-## Siła silnika na każde z dwóch tylnych kół [N] (razem ~3,4 m/s² na pusto).
-@export var engine_force_max: float = 4200.0
+@export var vehicle_mass: float = 1800.0
+## Siła silnika na każde z dwóch tylnych kół [N] (razem ~3,3 m/s² na pusto).
+@export var engine_force_max: float = 3000.0
 @export var max_speed_kmh: float = 70.0
 @export var reverse_speed_kmh: float = 15.0
-## Hamulec (wartość Godota ~ impuls na koło na klatkę; 60 ≈ 5-6 m/s² przy 2,5 t).
-@export var brake_strength: float = 60.0
-@export var handbrake_strength: float = 90.0
+## Hamulec (wartość Godota ~ impuls na koło na klatkę; 45 ≈ 6 m/s² przy 1,8 t).
+@export var brake_strength: float = 45.0
+@export var handbrake_strength: float = 65.0
 ## Hamowanie silnikiem, gdy nic nie wciskamy.
 @export var engine_braking: float = 3.0
 ## Opór powietrza F = c·v² i toczenia F = c·m·g.
@@ -39,7 +40,7 @@ const SEAT_LABELS: Array[String] = ["za kierownicę", "jako pasażer", "na pół
 @export_group("Skręt")
 @export var max_steer: float = 0.6
 ## Maks. skręt przy prędkości maksymalnej (żeby nie wywracać się na zakrętach).
-@export var high_speed_steer: float = 0.18
+@export var high_speed_steer: float = 0.14
 @export var steer_rate: float = 1.6  ## rad/s
 @export var steer_return_rate: float = 2.4
 
@@ -50,11 +51,17 @@ const SEAT_LABELS: Array[String] = ["za kierownicę", "jako pasażer", "na pół
 ## Po ilu sekundach bez wejścia od kierowcy host uznaje, że puścił pedały.
 @export var input_timeout: float = 0.4
 
+@export_group("Dźwięk")
+@export var engine_volume_db: float = -4.0
+## Prędkości [km/h], przy których skrzynia wrzuca wyższy bieg (do dźwięku i obrotów).
+@export var gear_top_speeds: PackedFloat32Array = PackedFloat32Array([16.0, 32.0, 50.0, 72.0])
+
 ## Replikowane z hosta:
 var net_position: Vector3
 var net_rotation: Quaternion = Quaternion.IDENTITY
 var net_speed: float = 0.0  ## prędkość do przodu [m/s] (koła, prędkościomierz)
 var net_steer: float = 0.0
+var net_throttle: float = 0.0  ## gaz kierowcy (-1..1) - do dźwięku silnika
 var net_door_open: bool = false
 ## peer_id na każdym miejscu (0 = wolne).
 var net_seats: PackedInt32Array = PackedInt32Array([0, 0, 0, 0])
@@ -69,6 +76,23 @@ var _wheel_meshes: Array[Node3D] = []
 var _wheel_spin: float = 0.0
 var _bump_area: Area3D
 var _bump_timer: float = 0.0
+var _steering_wheel: Node3D
+
+# Dźwięk (u każdego gracza, liczony z replikowanego stanu).
+var _snd_idle: AudioStreamPlayer3D
+var _snd_drive: AudioStreamPlayer3D
+var _snd_start: AudioStreamPlayer3D
+var _snd_gear: AudioStreamPlayer3D
+var _snd_brake: AudioStreamPlayer3D
+var _snd_door: Array[AudioStreamPlayer3D] = []  ## [lewe, prawe, tył]
+var _engine_on: bool = false
+var _engine_level: float = 0.0  ## 0..1, płynne wyciszanie po zgaszeniu
+var _start_timer: float = 0.0
+var _rpm: float = 0.0
+var _gear: int = 0  ## -1 wsteczny, 0.. biegi do przodu
+var _peak_speed: float = 0.0
+var _prev_seats: PackedInt32Array = PackedInt32Array([0, 0, 0, 0])
+var _prev_door_open: bool = false
 
 # Tylko host: ostatnie wejście kierowcy.
 var _in_throttle: float = 0.0
@@ -86,8 +110,11 @@ const CARGO_HALF_W_U: float = 0.55
 const CARGO_BACK_U: float = -1.6
 const CARGO_FRONT_U: float = 0.2
 const HINGE_U: Vector3 = Vector3(0.0, 0.5, -1.55)
-const BENCH_HEIGHT: float = 0.45  ## [m] nad podłogą paki
-const BENCH_DEPTH: float = 0.45
+const BENCH_HEIGHT: float = 0.42  ## [m] nad podłogą paki
+const BENCH_DEPTH: float = 0.4
+const CAB_FLOOR_U: float = 0.45
+const CAB_SEAT_TOP_U: float = 0.62
+const CAB_SEAT_Z_U: float = 0.66
 
 
 func _ready() -> void:
@@ -97,7 +124,7 @@ func _ready() -> void:
 	collision_layer = 1      # jak świat: gracze i przedmioty się od nas odbijają
 	collision_mask = 1 | 4   # świat + przedmioty (graczy wykrywa _bump_area)
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0, 0.75, 0.2)  # nisko, żeby nie przewracać się na zakrętach
+	center_of_mass = Vector3(0, 0.3, 0.15)  # nisko (ciężkie podwozie), żeby nie przewracać się na zakrętach
 	can_sleep = false
 
 	var visual: Node3D = MODEL.instantiate()
@@ -107,8 +134,11 @@ func _ready() -> void:
 	_build_wheels(visual)
 	_build_door(visual)
 	_build_collision()
+	_build_body_glass(visual)
+	_build_cab_interior()
 	_build_bench()
 	_build_zones()
+	_build_audio()
 
 	net_position = global_position
 	net_rotation = global_basis.get_rotation_quaternion()
@@ -130,12 +160,19 @@ func _physics_process(delta: float) -> void:
 		net_rotation = global_basis.get_rotation_quaternion()
 		net_speed = linear_velocity.dot(global_basis.z)
 		net_steer = steering
+		net_throttle = _in_throttle
 	else:
 		var t: float = 1.0 - exp(-18.0 * delta)
 		global_position = global_position.lerp(net_position, t)
 		global_basis = Basis(global_basis.get_rotation_quaternion().slerp(net_rotation, t))
 		_client_wheel_visuals(delta)
 	_animate_door(delta)
+	if _steering_wheel != null:
+		_steering_wheel.rotation.z = -net_steer * 4.0  # kierownica obraca się ~4x bardziej niż koła
+
+
+func _process(delta: float) -> void:
+	_update_audio(delta)
 
 
 # --- API dla graczy ---------------------------------------------------------------
@@ -159,12 +196,14 @@ func seat_transform(seat: int) -> Transform3D:
 	match seat:
 		SEAT_DRIVER, SEAT_PASSENGER:
 			var side: float = 1.0 if seat == SEAT_DRIVER else -1.0  # kierowca po lewej (+X)
-			local = Transform3D(Basis(Vector3.UP, PI), Vector3(0.32 * S * side, 1.12 * S - 0.9, 0.72 * S))
+			# Oczy siedzącego ~0,65 m nad siedziskiem (postać kuca: oczy 0,9 m nad stopami).
+			var feet_y: float = CAB_SEAT_TOP_U * S + 0.65 - 0.9
+			local = Transform3D(Basis(Vector3.UP, PI), Vector3(0.32 * S * side, feet_y, CAB_SEAT_Z_U * S))
 		_:
 			var side: float = 1.0 if seat == SEAT_BENCH_L else -1.0
 			var seat_top: float = CARGO_FLOOR_U * S + BENCH_HEIGHT
 			var z: float = CARGO_FRONT_U * S - BENCH_DEPTH * 0.5
-			local = Transform3D(Basis.IDENTITY, Vector3(0.6 * side, seat_top + 0.75 - 0.9, z))
+			local = Transform3D(Basis.IDENTITY, Vector3(0.45 * side, seat_top + 0.65 - 0.9, z))
 	return global_transform * local
 
 
@@ -179,9 +218,9 @@ func exit_points(seat: int) -> Array[Vector3]:
 			pts.append(Vector3((0.75 * S + 0.6) * -side, 0.1, 0.75 * S))
 			pts.append(Vector3(0, 0.1, 1.65 * S + 0.8))
 		_:
-			var side: float = 1.0 if seat == SEAT_BENCH_L else -1.0
-			pts.append(Vector3(0.6 * side, CARGO_FLOOR_U * S + 0.05, CARGO_FRONT_U * S - BENCH_DEPTH - 0.6))
-			pts.append(Vector3(0, CARGO_FLOOR_U * S + 0.05, -0.7 * S))
+			# Środkiem paki (po bokach są nadkola), od półki w stronę drzwi.
+			for z: float in [-0.5, -1.0, -1.5, -2.0, -2.5]:
+				pts.append(Vector3(0, CARGO_FLOOR_U * S + 0.01, CARGO_FRONT_U * S - BENCH_DEPTH + z + 0.1))
 			pts.append(Vector3(0, 0.1, CARGO_BACK_U * S - 3.2))  # za rampą
 	var out: Array[Vector3] = []
 	for p in pts:
@@ -446,7 +485,7 @@ func _build_wheels(visual: Node3D) -> void:
 		wheel.damping_compression = 0.45
 		wheel.damping_relaxation = 0.6
 		wheel.wheel_friction_slip = 2.6
-		wheel.wheel_roll_influence = 0.12
+		wheel.wheel_roll_influence = 0.04  # mniej = mniejszy przechył w zakręcie
 		# Koło (ośka zawieszenia) wyżej o tyle, ile auto osiądzie - wtedy stoi jak w modelu.
 		wheel.position = center + Vector3.UP * ((SUSP_REST - sag) if multiplayer.is_server() else 0.0)
 		add_child(wheel)
@@ -509,6 +548,263 @@ func _add_box(min_p: Vector3, max_p: Vector3) -> void:
 	shape.shape = box
 	shape.position = (min_p + max_p) * 0.5
 	add_child(shape)
+
+
+## Rozdziela karoserię na dwie części: nieprzezroczystą (widoczną też od środka - inaczej
+## z kabiny widać przez ściany) i szyby (półprzezroczyste). Szyby w teksturze Kenney
+## to jeden pasek koloru: u = 0.094, v = 0.77..0.98.
+func _build_body_glass(visual: Node3D) -> void:
+	var body := visual.get_node_or_null("body") as MeshInstance3D
+	if body == null or not (body.mesh is ArrayMesh):
+		return
+	var src := body.mesh as ArrayMesh
+	var arrays: Array = src.surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var solid := PackedInt32Array()
+	var glass := PackedInt32Array()
+	for t in range(0, idx.size(), 3):
+		var uv: Vector2 = (uvs[idx[t]] + uvs[idx[t + 1]] + uvs[idx[t + 2]]) / 3.0
+		var is_glass: bool = absf(uv.x - 0.09375) < 0.004 and uv.y > 0.765 and uv.y < 0.985
+		for k in 3:
+			if is_glass:
+				glass.append(idx[t + k])
+			else:
+				solid.append(idx[t + k])
+	if glass.is_empty():
+		return
+
+	var mesh := ArrayMesh.new()
+	var solid_arrays: Array = arrays.duplicate()
+	solid_arrays[Mesh.ARRAY_INDEX] = solid
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, solid_arrays)
+	var paint := (src.surface_get_material(0) as BaseMaterial3D).duplicate() as BaseMaterial3D
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, paint)
+
+	var glass_arrays: Array = arrays.duplicate()
+	glass_arrays[Mesh.ARRAY_INDEX] = glass
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, glass_arrays)
+	var glass_mat := StandardMaterial3D.new()
+	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass_mat.albedo_color = Color(0.72, 0.86, 0.95, 0.18)
+	glass_mat.roughness = 0.05
+	glass_mat.metallic_specular = 0.9
+	glass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(1, glass_mat)
+	body.mesh = mesh
+
+
+## Wnętrze kabiny: podłoga, fotele, deska rozdzielcza, kierownica, tylna ściana.
+func _build_cab_interior() -> void:
+	var dark := _mat(Color(0.2, 0.21, 0.24))
+	var seat := _mat(Color(0.28, 0.33, 0.42))
+	var dash := _mat(Color(0.16, 0.17, 0.19))
+	var trim := _mat(Color(0.55, 0.57, 0.62))
+	var u := func(x0: float, y0: float, z0: float, x1: float, y1: float, z1: float) -> Array:
+		return [Vector3(x0, y0, z0) * S, Vector3(x1, y1, z1) * S]
+
+	var parts: Array = [
+		# Wymiary dopasowane do skorupy kabiny (zmierzone w modelu): boki ~±0.53, dół przedniej
+		# szyby przy z ~1.09, a nisko (y < 0.62) od z = 0.78 do przodu są nadkola - tam
+		# wnętrze ma tylko ±0.33, inaczej widać je przez wycięcie na koło.
+		[u.call(-0.5, CAB_FLOOR_U - 0.03, 0.47, 0.5, CAB_FLOOR_U, 0.78), dark],       # podłoga przy fotelach
+		[u.call(-0.32, CAB_FLOOR_U - 0.03, 0.78, 0.32, CAB_FLOOR_U, 1.06), dark],     # podłoga między nadkolami
+		# Ścianka między kabiną a paką: cofnięta do przedniej ściany paki (z = 0.2..0.22) i węższa
+		# od paki (±0.54), więc z zewnątrz zasłaniają ją boki paki - nic nie wystaje.
+		[u.call(-0.54, CAB_FLOOR_U, 0.2, 0.54, 1.5, 0.22), trim],
+		[u.call(-0.52, 0.67, 0.98, 0.52, 0.77, 1.07), dash],                          # deska
+		[u.call(-0.32, CAB_FLOOR_U, 1.0, 0.32, 0.67, 1.07), dark],                    # pod deską
+		[u.call(-0.12, CAB_FLOOR_U, 0.5, 0.12, 0.6, 0.95), dark],                     # tunel
+	]
+	for side: float in [1.0, -1.0]:
+		var x: float = 0.32 * side
+		parts.append([u.call(x - 0.17, CAB_FLOOR_U, CAB_SEAT_Z_U - 0.14, x + 0.17, CAB_SEAT_TOP_U, CAB_SEAT_Z_U + 0.12), seat])
+		parts.append([u.call(x - 0.17, CAB_SEAT_TOP_U, 0.48, x + 0.17, 1.12, 0.55), seat])   # oparcie
+		parts.append([u.call(x - 0.1, 1.12, 0.49, x + 0.1, 1.2, 0.54), seat])                # zagłówek
+	for part: Array in parts:
+		_add_visual_box(part[0][0], part[0][1], part[1])
+
+	# Zegary na desce (jasne kółka) i kierownica przed kierowcą.
+	for dx: float in [-0.06, 0.06]:
+		var gauge := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.045 * S
+		cyl.bottom_radius = 0.045 * S
+		cyl.height = 0.01
+		cyl.material = _mat(Color(0.85, 0.88, 0.92))
+		gauge.mesh = cyl
+		gauge.position = Vector3((0.32 + dx) * S, 0.772 * S, 1.02 * S)
+		gauge.rotation = Vector3(deg_to_rad(-70), 0, 0)
+		add_child(gauge)
+
+	var column := Node3D.new()
+	column.name = "SteeringColumn"
+	column.position = Vector3(0.32 * S, 0.79 * S, 0.94 * S)
+	column.rotation = Vector3(deg_to_rad(-55), 0, 0)  # kierownica pochylona do kierowcy
+	add_child(column)
+	_steering_wheel = Node3D.new()
+	column.add_child(_steering_wheel)
+	var rim := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.105 * S
+	torus.outer_radius = 0.125 * S
+	torus.material = dash
+	rim.mesh = torus
+	_steering_wheel.add_child(rim)
+	var spoke := MeshInstance3D.new()
+	var spoke_mesh := BoxMesh.new()
+	spoke_mesh.size = Vector3(0.23 * S, 0.015 * S, 0.02 * S)
+	spoke_mesh.material = trim
+	spoke.mesh = spoke_mesh
+	_steering_wheel.add_child(spoke)
+	var hub := MeshInstance3D.new()
+	var hub_mesh := CylinderMesh.new()
+	hub_mesh.top_radius = 0.035 * S
+	hub_mesh.bottom_radius = 0.035 * S
+	hub_mesh.height = 0.04 * S
+	hub_mesh.material = trim
+	hub.mesh = hub_mesh
+	_steering_wheel.add_child(hub)
+	var shaft := MeshInstance3D.new()
+	var shaft_mesh := CylinderMesh.new()
+	shaft_mesh.top_radius = 0.02 * S
+	shaft_mesh.bottom_radius = 0.025 * S
+	shaft_mesh.height = 0.15 * S
+	shaft_mesh.material = dash
+	shaft.mesh = shaft_mesh
+	shaft.position = Vector3(0, -0.075 * S, 0)
+	column.add_child(shaft)
+
+
+func _mat(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = 0.8
+	return m
+
+
+# --- Dźwięk --------------------------------------------------------------------------
+
+func _build_audio() -> void:
+	_snd_idle = _make_player("engine_idle", Vector3(0, 0.6, 1.3) * S, true, 10.0)
+	_snd_drive = _make_player("engine_drive", Vector3(0, 0.6, 1.3) * S, true, 12.0)
+	_snd_start = _make_player("engine_start", Vector3(0, 0.6, 1.3) * S, false, 10.0)
+	_snd_gear = _make_player("gear_shift", Vector3(0, 0.4, 0.6) * S, false, 5.0)
+	_snd_brake = _make_player("brake_hiss", Vector3(0, 0.3, -0.6) * S, false, 7.0)
+	_snd_door = [
+		_make_player("cab_enter", Vector3(0.76, 0.8, 0.75) * S, false, 5.0),
+		_make_player("cab_enter", Vector3(-0.76, 0.8, 0.75) * S, false, 5.0),
+		_make_player("door_slam", HINGE_U * S + Vector3(0, 0.5, 0), false, 6.0),
+	]
+	_snd_idle.volume_db = -80.0
+	_snd_drive.volume_db = -80.0
+
+
+func _make_player(file: String, pos: Vector3, looped: bool, unit_size: float) -> AudioStreamPlayer3D:
+	var player := AudioStreamPlayer3D.new()
+	var path: String = SOUND_DIR + file + ".ogg"
+	if ResourceLoader.exists(path):
+		var stream := load(path) as AudioStream
+		if looped and stream is AudioStreamOggVorbis:
+			stream = stream.duplicate()
+			(stream as AudioStreamOggVorbis).loop = true
+		player.stream = stream
+	player.position = pos
+	player.unit_size = unit_size
+	player.max_distance = 90.0
+	add_child(player)
+	return player
+
+
+func _play(player: AudioStreamPlayer3D, stream_file: String = "", pitch: float = 1.0) -> void:
+	if stream_file != "":
+		var path: String = SOUND_DIR + stream_file + ".ogg"
+		if ResourceLoader.exists(path):
+			player.stream = load(path)
+	if player.stream == null:
+		return
+	player.pitch_scale = pitch
+	player.play()
+
+
+## Silnik i efekty liczone z replikowanego stanu - brzmi tak samo u wszystkich.
+func _update_audio(delta: float) -> void:
+	if _snd_idle == null:
+		return
+	# Wsiadanie / wysiadanie z kabiny i drzwi paki.
+	for i in [SEAT_DRIVER, SEAT_PASSENGER]:
+		if net_seats[i] != _prev_seats[i]:
+			_play(_snd_door[i], "cab_enter" if net_seats[i] != 0 else "cab_exit")
+	if net_door_open != _prev_door_open:
+		_play(_snd_door[2], "door_slam", 0.8 if net_door_open else 1.0)
+	_prev_door_open = net_door_open
+
+	# Silnik: odpala się, gdy ktoś siądzie za kierownicą, gaśnie, gdy wysiądzie.
+	var want_on: bool = net_seats[SEAT_DRIVER] != 0
+	if want_on and not _engine_on:
+		_engine_on = true
+		_start_timer = 2.6  # rozruch, potem równa praca
+		_play(_snd_start)
+		_rpm = 0.0
+	elif not want_on and _engine_on:
+		_engine_on = false
+	_prev_seats = net_seats.duplicate()
+
+	_start_timer = maxf(0.0, _start_timer - delta)
+	var running: bool = _engine_on and _start_timer < 0.6
+	_engine_level = move_toward(_engine_level, 1.0 if running else 0.0, delta * (1.5 if running else 0.8))
+	if _engine_level <= 0.0:
+		if _snd_idle.playing:
+			_snd_idle.stop()
+			_snd_drive.stop()
+		_track_brake_hiss()
+		return
+	if not _snd_idle.playing:
+		_snd_idle.play()
+		_snd_drive.play()
+
+	# Obroty z prędkości i biegu (4 biegi + wsteczny); zmiana biegu = stuknięcie skrzyni.
+	var kmh: float = absf(net_speed) * 3.6
+	var gear: int = _gear
+	if net_speed < -0.5:
+		gear = -1
+	elif gear < 0:
+		gear = 0
+	else:
+		while gear < gear_top_speeds.size() - 1 and kmh > gear_top_speeds[gear] * 0.92:
+			gear += 1
+		while gear > 0 and kmh < gear_top_speeds[gear - 1] * 0.6:
+			gear -= 1
+	if gear != _gear:
+		if _engine_on and (gear == -1 or _gear == -1 or gear > _gear):
+			_play(_snd_gear, "", randf_range(0.95, 1.05))
+		if gear > _gear and _gear >= 0:
+			_rpm *= 0.55  # po zmianie w górę obroty spadają
+		_gear = gear
+	var top: float = reverse_speed_kmh if _gear < 0 else gear_top_speeds[_gear]
+	var low: float = 0.0 if _gear <= 0 else gear_top_speeds[_gear - 1] * 0.6
+	var target_rpm: float = clampf((kmh - low) / maxf(top - low, 1.0), 0.0, 1.0)
+	var throttle: float = absf(net_throttle)
+	if kmh < 3.0:
+		target_rpm = maxf(target_rpm, throttle * 0.45)  # gaz na postoju - silnik wkręca się
+	_rpm = move_toward(_rpm, target_rpm, delta * (2.0 if target_rpm > _rpm else 1.2))
+
+	var engine_load: float = clampf(throttle * 0.85 + _rpm * 0.25, 0.0, 1.0)
+	_snd_idle.pitch_scale = 0.9 + _rpm * 0.45
+	_snd_drive.pitch_scale = 0.8 + _rpm * 0.5
+	_snd_idle.volume_db = engine_volume_db + linear_to_db(maxf(0.001, _engine_level * lerpf(1.0, 0.3, engine_load)))
+	_snd_drive.volume_db = engine_volume_db + linear_to_db(maxf(0.001, _engine_level * (0.15 + engine_load * 0.85)))
+	_track_brake_hiss()
+
+
+## Syk hamulca pneumatycznego, gdy auto zatrzyma się po jeździe.
+func _track_brake_hiss() -> void:
+	var speed: float = absf(net_speed)
+	_peak_speed = maxf(_peak_speed, speed)
+	if speed < 0.4 and _peak_speed > 4.0:
+		_peak_speed = 0.0
+		_play(_snd_brake, "", randf_range(0.95, 1.05))
 
 
 ## Półka do siedzenia dla 2 osób przy ścianie kabiny (twarzą do drzwi).
@@ -575,7 +871,7 @@ func _build_zones() -> void:
 
 func _setup_sync() -> void:
 	var cfg := SceneReplicationConfig.new()
-	for prop: String in [":net_position", ":net_rotation", ":net_speed", ":net_steer", ":net_door_open", ":net_seats"]:
+	for prop: String in [":net_position", ":net_rotation", ":net_speed", ":net_steer", ":net_throttle", ":net_door_open", ":net_seats"]:
 		var path := NodePath(prop)
 		cfg.add_property(path)
 		cfg.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)

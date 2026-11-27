@@ -65,8 +65,8 @@ const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
 ## Z jakiej odległości można wsiąść / otworzyć drzwi auta.
 @export var interact_reach: float = 3.0
 ## Kamera 3. osoby za autem: odległość i wysokość.
-@export var chase_distance: float = 11.0
-@export var chase_height: float = 5.0
+@export var chase_distance: float = 9.0
+@export var chase_height: float = 4.0
 
 ## Replikowane do pozostałych graczy:
 var net_position: Vector3
@@ -543,7 +543,7 @@ func _enter_seat(van: Van, seat_index: int) -> void:
 	grabber.release()
 	_crouching = false
 	_seat_yaw = 0.0
-	_third_person = seat_index == Van.SEAT_DRIVER
+	_third_person = false  # kabina ma wnętrze i szyby - domyślnie widok z fotela (V = zza auta)
 	_update_camera()
 
 
@@ -571,9 +571,9 @@ func _space_free(feet: Vector3) -> bool:
 	var query := PhysicsShapeQueryParameters3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = _capsule.radius
-	shape.height = stand_height
+	shape.height = stand_height - 0.1  # w pace jest tylko ~1,84 m - bez zapasu by się "nie mieściło"
 	query.shape = shape
-	query.transform = Transform3D(Basis(), feet + Vector3.UP * (stand_height * 0.5 + 0.05))
+	query.transform = Transform3D(Basis(), feet + Vector3.UP * (stand_height * 0.5 + 0.02))
 	query.collision_mask = 1 | 4
 	query.exclude = [get_rid()]
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()

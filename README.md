@@ -34,8 +34,11 @@ Auto: E patrząc na drzwi kabiny = wsiądź (kierowca po lewej, pasażer po praw
 A/D skręt, Spacja ręczny, V kamera 1./3. osoby, E wysiądź.
 
 ## Auto (`scenes/vehicles/van.tscn`, `scripts/vehicles/van.gd`)
-Dostawczak z Kenney Car Kit (`delivery.glb`, skala 2,3) na `VehicleBody3D`: napęd na tył, 2,5 t, ~0-40 km/h w 6 s,
-hamowanie ~6 m/s², maks. 70 km/h. Fizykę liczy host, kierowca wysyła mu tylko wejście; miejsca (`net_seats`) i drzwi
+Dostawczak z Kenney Car Kit (`delivery.glb`, skala 1,84) na `VehicleBody3D`: napęd na tył, 1,8 t, ~0-40 km/h w 6 s,
+hamowanie ~6,5 m/s², maks. 70 km/h. Kabina ma wnętrze (fotele, deska, kierownica obracająca się z kołami) i przezroczyste
+szyby - domyślnie jedzie się z widoku kierowcy, V przełącza na kamerę zza auta. Dźwięki w `assets/audio/van/`:
+rozruch, bieg jałowy i jazda (wysokość z obrotów 4-biegowej "skrzyni"), zmiana biegu, syk hamulca po zatrzymaniu,
+wsiadanie/wysiadanie, drzwi paki. Fizykę liczy host, kierowca wysyła mu tylko wejście; miejsca (`net_seats`) i drzwi
 też zmienia host. Paka (`cargo_zone`) to strefa załadunku zlecenia; szkody przedmiotów w pace, których nikt nie trzyma,
 idą na konto kierowcy. Potrącenie przy > 3 m/s przewraca gracza.
 
