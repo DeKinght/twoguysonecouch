@@ -19,6 +19,7 @@ extends CharacterBody3D
 @export var jump_velocity: float = 4.5
 
 @export_group("Kamera")
+## Bazowa czułość; gracz mnoży ją suwakiem w ustawieniach (Settings.sensitivity_mult).
 @export var mouse_sensitivity: float = 0.0025
 
 @export_group("Kucanie")
@@ -104,16 +105,16 @@ func is_down() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if Net.input_locked:
+	# Esc obsługuje menu pauzy (ui/pause_menu.gd), tutaj tylko kamera.
+	if Settings.input_blocked():
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if _down_timer > 0.0:
 			return
-		rotate_y(-event.relative.x * mouse_sensitivity)
-		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity, -1.5, 1.5)
+		var sens: float = mouse_sensitivity * Settings.sensitivity_mult
+		rotate_y(-event.relative.x * sens)
+		_pitch = clampf(_pitch - event.relative.y * sens, -1.5, 1.5)
 		head.rotation.x = _pitch
-	elif event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed \
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -128,7 +129,7 @@ func _physics_process(delta: float) -> void:
 	_update_down(delta)
 	_shove_cd = maxf(0.0, _shove_cd - delta)
 	if Input.is_action_just_pressed("shove") and _down_timer <= 0.0 and _shove_cd <= 0.0 \
-			and not Net.input_locked:
+			and not Settings.input_blocked():
 		_try_shove()
 
 	_update_crouch(delta)
@@ -168,7 +169,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _read_input() -> void:
-	if _down_timer > 0.0 or Net.input_locked:
+	if _down_timer > 0.0 or Settings.input_blocked():
 		_move_input = Vector2.ZERO
 		_jump_pressed = false
 		_sprint_held = false

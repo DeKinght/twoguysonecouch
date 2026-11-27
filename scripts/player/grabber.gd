@@ -57,7 +57,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if Net.input_locked:
+	if Settings.input_blocked():
 		release()
 		return
 	var player := owner as Player

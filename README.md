@@ -1,4 +1,4 @@
-# Przeprowadzka z piekła
+# Two Guys One Couch
 
 Godot 4.3+ (standardowy, nie .NET). Otwórz `project.godot` w Godot Project Manager (Import) i wciśnij F5.
 
