@@ -80,6 +80,8 @@ var net_height: float = 1.8
 var net_down: bool = false
 var net_on_floor: bool = true
 var net_holding: bool = false
+## Obrót głowy względem ciała (w aucie ciało siedzi nieruchomo, rozgląda się tylko głowa).
+var net_head_yaw: float = 0.0
 
 ## Wygląd postaci (indeks w CharacterModel.VARIANTS). Losuje host przy spawnie; -1 = losuj lokalnie.
 var skin: int = -1
@@ -465,13 +467,16 @@ func _remote_update(delta: float) -> void:
 	if not found.is_empty():
 		var van: Van = found[0]
 		collision.disabled = true
-		global_position = van.seat_transform(found[1]).origin
-		rotation.y = lerp_angle(rotation.y, net_yaw, 1.0 - exp(-remote_smoothing * delta))
+		var seat_t: Transform3D = van.seat_transform(found[1])
+		global_basis = seat_t.basis  # ciało przodem do kierunku fotela
+		global_position = seat_t.origin
+		head.rotation.y = lerp_angle(head.rotation.y, net_head_yaw, 1.0 - exp(-remote_smoothing * delta))
 		head.rotation.x = net_pitch
 		_apply_height(lerpf(_capsule.height, net_height, 0.3))
 		_update_model(true)
 		return
 	collision.disabled = false
+	head.rotation.y = 0.0
 	var t: float = 1.0 - exp(-remote_smoothing * delta)
 	global_position = global_position.lerp(net_position, t)
 	rotation.y = lerp_angle(rotation.y, net_yaw, t)
@@ -484,7 +489,7 @@ func _remote_update(delta: float) -> void:
 
 func _setup_sync() -> void:
 	var cfg := SceneReplicationConfig.new()
-	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down", ":net_on_floor", ":net_holding"]:
+	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down", ":net_on_floor", ":net_holding", ":net_head_yaw"]:
 		var path := NodePath(prop)
 		cfg.add_property(path)
 		cfg.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
@@ -514,6 +519,7 @@ func _update_model(seated: bool) -> void:
 	seated = seated or vehicle != null
 	_model.update_state(0.0 if seated else _ground_speed, 0.0 if seated else crouch, net_on_floor,
 			net_down, net_holding, seated)
+	_model.look_yaw = (_seat_yaw if is_local else net_head_yaw) if seated else 0.0
 
 
 ## Nazwa nad głową cudzej postaci.
@@ -577,8 +583,11 @@ func _leave_seat() -> void:
 	seat = -1
 	collision.disabled = false
 	velocity = Vector3.ZERO
-	var yaw: float = global_basis.get_euler().y
+	var yaw: float = global_basis.get_euler().y + _seat_yaw  # wysiadamy patrząc tam, gdzie patrzyła głowa
 	global_basis = Basis(Vector3.UP, yaw)
+	head.rotation.y = 0.0
+	_seat_yaw = 0.0
+	net_head_yaw = 0.0
 	if is_instance_valid(van):
 		var points: Array[Vector3] = van.exit_points(old_seat)
 		global_position = points[0]
@@ -611,7 +620,8 @@ func _seated_process(delta: float) -> void:
 		_update_camera()
 
 	var t: Transform3D = vehicle.seat_transform(seat)
-	global_basis = t.basis * Basis(Vector3.UP, _seat_yaw)
+	global_basis = t.basis              # ciało siedzi nieruchomo przodem do kierownicy...
+	head.rotation.y = _seat_yaw         # ...a mysz obraca tylko głowę (i kamerę FPP)
 	global_position = t.origin
 	_apply_height(move_toward(_capsule.height, crouch_height, 6.0 * delta))
 
@@ -633,6 +643,7 @@ func _seated_process(delta: float) -> void:
 
 	net_position = global_position
 	net_yaw = rotation.y
+	net_head_yaw = _seat_yaw
 	net_pitch = _pitch
 	net_height = _capsule.height
 	net_down = false

@@ -48,6 +48,10 @@ var variant: int = 0
 var skeleton: Skeleton3D
 var anim: AnimationPlayer
 
+## Obrót głowy w lewo/prawo [rad] dokładany po animacji (np. rozglądanie się w aucie).
+var look_yaw: float = 0.0
+const MAX_HEAD_YAW: float = deg_to_rad(80.0)
+
 var _mesh_instance: MeshInstance3D
 var _state: String = ""
 
@@ -93,6 +97,15 @@ func update_state(speed: float, crouch: float, on_floor: bool, down: bool, holdi
 			anim.speed_scale = clampf(speed / RUN_ANIM_SPEED, 0.8, 1.4)
 		_:
 			anim.speed_scale = 1.0
+
+
+## Po nałożeniu animacji: dokręcamy głowę w stronę, w którą patrzy gracz (z limitem szyi).
+func _apply_look() -> void:
+	if absf(look_yaw) < 0.001:
+		return
+	var head: int = skeleton.find_bone("Head")
+	var yaw: float = clampf(wrapf(look_yaw, -PI, PI), -MAX_HEAD_YAW, MAX_HEAD_YAW)
+	skeleton.set_bone_pose_rotation(head, Quaternion(Vector3.UP, yaw) * skeleton.get_bone_pose_rotation(head))
 
 
 func play_state(state: String) -> void:
@@ -141,6 +154,7 @@ func _build_mesh(path: String) -> void:
 func _build_animations() -> void:
 	anim = AnimationPlayer.new()
 	anim.name = "AnimationPlayer"
+	anim.mixer_applied.connect(_apply_look)
 	add_child(anim)
 	var lib := AnimationLibrary.new()
 	lib.add_animation("idle", _anim_idle())
