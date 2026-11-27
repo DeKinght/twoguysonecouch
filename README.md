@@ -48,9 +48,15 @@ ustaw `model` (plik .glb z `assets/models/furniture/`), `item_name`, `mass`, `va
 mają skalę ~1:2, stąd domyślne `model_scale = 2`.
 
 ## Postacie (`scripts/player/character_model.gd`)
-6 oryginalnych tragarzy (Rudy, Zenek, Ola, Bonzo, Wiesiek, Kaśka) budowanych w kodzie: Skeleton3D z 17 kośćmi
-(biodra, kręgosłup, klatka, szyja, głowa, ramiona/przedramiona/dłonie, uda/łydki/stopy), siatka ze skinningiem
-i animacje: idle, walk, run, carry, carry_walk, crouch, crouch_walk, sit, jump, fall. Host losuje każdemu graczowi
-wygląd przy spawnie (bez powtórek) i rozsyła go w danych spawnu. Własna postać jest na warstwie 10, której nie widzi
-kamera FPP (widać ją w kamerze zza auta i po cieniu).
+3 oryginalne postacie tragarzy: Bartek (polówka, czapka, broda), Ola (odblaskowa kurtka, kucyk) i Dawid
+(ogrodniczki, okulary, kręcone włosy). Siatki (`assets/characters/*.res`, ~60 tys. trójkątów) są wyrzeźbione
+skryptem `tools/characters/sculpt.py` (miękko łączone kształty + marching cubes, płynne wagi kości na stawach)
+i zamienione na zasoby Godota przez `tools/characters/build_meshes.gd`. Szkielet: 17 kości (biodra, kręgosłup,
+klatka, szyja, głowa, ramiona/przedramiona/dłonie, uda/łydki/stopy). Animacje: idle, walk, run, carry,
+carry_walk, crouch, crouch_walk, sit, jump, fall. Host losuje każdemu graczowi postać przy spawnie (bez powtórek).
 
+Przebudowa postaci po zmianie w sculpt.py:
+```
+python tools/characters/sculpt.py /tmp/chars        # wymaga numpy, scikit-image, pyfqmr
+godot --headless --path . -s tools/characters/build_meshes.gd -- /tmp/chars
+```
