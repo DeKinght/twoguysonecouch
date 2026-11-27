@@ -70,6 +70,8 @@ var net_down: bool = false
 var net_on_floor: bool = true
 
 var is_local: bool = true
+## "Użyj" (E) - tylko u lokalnego gracza.
+var interactor: Interactor = null
 
 var _pitch: float = 0.0
 var _crouching: bool = false
@@ -113,6 +115,10 @@ func _ready() -> void:
 	_setup_footsteps()
 
 	if is_local:
+		interactor = Interactor.new()
+		interactor.name = "Interactor"
+		interactor.player = self
+		camera.add_child(interactor)
 		camera.make_current()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	else:

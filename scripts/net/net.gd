@@ -21,6 +21,7 @@ const MAX_PLAYERS: int = 3
 const MENU_SCENE: String = "res://ui/main_menu.tscn"
 ## Mapy do wyboru w lobby (nazwa -> scena). Pierwsza jest domyślna.
 const LEVELS: Dictionary = {
+	"Siedziba (baza)": "res://scenes/levels/hq.tscn",
 	"Osiedle (3 domy)": "res://scenes/levels/street.tscn",
 	"Dom (mapa testowa)": "res://scenes/levels/house.tscn",
 }

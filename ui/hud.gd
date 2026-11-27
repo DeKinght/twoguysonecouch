@@ -146,12 +146,13 @@ func _pill() -> PanelContainer:
 # --- Odświeżanie -------------------------------------------------------------------------
 
 func _refresh_help() -> void:
-	_help.text = "[%s] złap    [%s] popchnij    [Esc] menu" % [
-		Settings.event_text("grab"), Settings.event_text("shove")]
+	_help.text = "[%s] złap    [%s] użyj    [%s] popchnij    [Esc] menu" % [
+		Settings.event_text("grab"), Settings.event_text("interact"), Settings.event_text("shove")]
 
 
 func _refresh_crosshair() -> void:
-	var active: bool = is_instance_valid(grabber.looked_at) or is_instance_valid(grabber.held)
+	var active: bool = is_instance_valid(grabber.looked_at) or is_instance_valid(grabber.held) \
+			or _usable() != null
 	_crosshair_style.bg_color = UITheme.PRIMARY if active else UITheme.TEXT
 	_set_dot_size(DOT_BIG if active else DOT_SMALL)
 
@@ -166,8 +167,19 @@ func _refresh_prompt() -> void:
 		var l: Grabbable = grabber.looked_at
 		text = "[%s]  %s   •   %.0f kg   •   %.0f zł" \
 				% [Settings.event_text("grab"), l.item_name, l.mass, l.value]
+	elif _usable() != null:
+		text = "[%s]  %s" % [Settings.event_text("interact"), _usable().interact_text()]
 	_prompt.text = text
 	_prompt_panel.visible = text != ""
+
+
+## To, na co patrzy gracz i czego może użyć klawiszem E (drzwi, brama...), albo null.
+func _usable() -> Node:
+	var player := get_parent() as Player
+	if player == null or player.interactor == null:
+		return null
+	var target: Node = player.interactor.looked_at
+	return target if is_instance_valid(target) else null
 
 
 func _on_damage(peer_id: int, item_name: String, loss: int) -> void:

@@ -17,6 +17,7 @@ const ACTIONS: Array = [
 	["sprint", "Sprint"],
 	["crouch", "Kucanie"],
 	["grab", "Chwyć / trzymaj"],
+	["interact", "Użyj (drzwi, brama)"],
 	["shove", "Popchnij kumpla"],
 ]
 
