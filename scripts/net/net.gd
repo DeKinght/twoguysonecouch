@@ -3,8 +3,10 @@ extends Node
 ##
 ## Reszta gry zna tylko wbudowane `multiplayer` - transport jest wymienny.
 ## Steam: lobby tworzy/znajduje GodotSteam, a właściwe połączenie (RPC, spawner,
-## synchronizatory) niesie SteamMultiplayerPeer. Do GodotSteam odwołujemy się
-## dynamicznie (Engine.get_singleton), więc gra działa też, gdy Steam jest niedostępny.
+## synchronizatory) niesie SteamMultiplayerPeer - WBUDOWANY w GodotSteam (od 4.2x).
+## Nie instaluj osobnego dodatku "steam-multiplayer-peer": ma klasę o tej samej nazwie
+## i obie gryzą się przy starcie. Do GodotSteam odwołujemy się dynamicznie
+## (Engine.get_singleton), więc gra działa też, gdy Steam jest niedostępny.
 
 signal player_list_changed
 signal connected                  ## klient połączył się z hostem
@@ -82,7 +84,7 @@ func _init_steam() -> void:
 		steam_status = "Brak dodatku GodotSteam."
 		return
 	if not ClassDB.class_exists("SteamMultiplayerPeer"):
-		steam_status = "Brak dodatku SteamMultiplayerPeer (zrestartuj edytor)."
+		steam_status = "Za stara wersja GodotSteam (brak SteamMultiplayerPeer) - zaktualizuj dodatek."
 		return
 
 	OS.set_environment("SteamAppId", str(STEAM_APP_ID))

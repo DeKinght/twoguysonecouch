@@ -11,6 +11,7 @@ extends CharacterBody3D
 ## Przewrócić może uderzenie ciężkiego przedmiotu, upadek z wysoka albo popchnięcie (B).
 
 const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
+const WORKER_SCENE: PackedScene = preload("res://scenes/characters/worker.tscn")
 
 @export_group("Ruch")
 @export var walk_speed: float = 4.5
@@ -68,6 +69,13 @@ const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
 @export var chase_distance: float = 9.0
 @export var chase_height: float = 4.0
 
+@export_group("Kamera 3. osoby (pieszo)")
+## TYMCZASOWO: start w 3. osobie, żeby widzieć swoją postać. V przełącza 1./3. osobę.
+@export var start_third_person: bool = true
+@export var tp_distance: float = 2.6
+@export var tp_shoulder: float = 0.55   ## przesunięcie w prawo (widok zza ramienia)
+@export var tp_height: float = 1.55     ## wysokość punktu, na który patrzy kamera
+
 ## Replikowane do pozostałych graczy:
 var net_position: Vector3
 var net_yaw: float = 0.0
@@ -95,7 +103,8 @@ var _chase_cam: Camera3D
 var _pitch: float = 0.0
 var _crouching: bool = false
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var _body_mesh: MeshInstance3D
+## Model postaci (robotnik). U siebie widoczny tylko w 3. osobie (w 1. osobie rzuca sam cień).
+var _body: WorkerRig
 
 var _down_timer: float = 0.0
 var _down_blend: float = 0.0
@@ -132,6 +141,7 @@ func _ready() -> void:
 	net_height = stand_height
 	_setup_sync()
 	_setup_footsteps()
+	_build_body()
 
 	if is_local:
 		interactor = Interactor.new()
@@ -140,6 +150,8 @@ func _ready() -> void:
 		camera.add_child(interactor)
 		camera.make_current()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_third_person = start_third_person
+		_update_camera()
 	else:
 		camera.clear_current(false)
 		$HUD.queue_free()
@@ -188,6 +200,9 @@ func _physics_process(delta: float) -> void:
 	if vehicle != null:
 		_seated_process(delta)
 		return
+	if Input.is_action_just_pressed("camera_toggle") and not Settings.input_blocked():
+		_third_person = not _third_person
+		_update_camera()
 
 	_read_input()
 	_update_down(delta)
@@ -232,6 +247,7 @@ func _physics_process(delta: float) -> void:
 	net_down = _down_timer > 0.0
 	net_on_floor = is_on_floor()
 	_update_footsteps(delta, net_on_floor)
+	_animate_body(delta, net_on_floor, false)
 	_update_interaction()
 
 
@@ -267,10 +283,9 @@ func _apply_height(height: float) -> void:
 	collision.position.y = height * 0.5
 	head.position.y = lerpf(height - eye_offset, 0.35, _down_blend)
 	head.rotation.z = _down_blend * 1.2
-	if _body_mesh != null:
-		(_body_mesh.mesh as CapsuleMesh).height = height
-		_body_mesh.position.y = lerpf(height * 0.5, 0.4, _down_blend)
-		_body_mesh.rotation.z = _down_blend * PI * 0.5
+	if _body != null:
+		# Kucanie, przewrócenie itd. robią animacje modelu (WorkerRig.update_animation).
+		_body.set_head_pitch(head.rotation.x)
 
 
 func _push_bodies() -> void:
@@ -423,6 +438,12 @@ func _update_footsteps(delta: float, on_floor: bool) -> void:
 		_play_step(gait, 0.0)
 
 
+func _animate_body(delta: float, on_floor: bool, seated: bool) -> void:
+	if _body != null:
+		_body.update_animation(delta, on_floor, _ground_speed, _capsule.height < stand_height - 0.2,
+				is_down(), seated)
+
+
 ## 0 = chód, 1 = sprint, 2 = kucanie.
 func _gait() -> int:
 	if _capsule.height < stand_height - 0.2:
@@ -448,6 +469,7 @@ func _remote_update(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, net_yaw, 1.0 - exp(-remote_smoothing * delta))
 		head.rotation.x = net_pitch
 		_apply_height(lerpf(_capsule.height, net_height, 0.3))
+		_animate_body(delta, true, true)
 		return
 	collision.disabled = false
 	var t: float = 1.0 - exp(-remote_smoothing * delta)
@@ -457,6 +479,7 @@ func _remote_update(delta: float) -> void:
 	_down_blend = move_toward(_down_blend, 1.0 if net_down else 0.0, 3.0 * delta)
 	_apply_height(lerpf(_capsule.height, net_height, t))
 	_update_footsteps(delta, net_on_floor)
+	_animate_body(delta, net_on_floor, false)
 
 
 func _setup_sync() -> void:
@@ -474,28 +497,17 @@ func _setup_sync() -> void:
 	add_child(sync)
 
 
-## Kapsuła + "nos" pokazujący, gdzie ktoś patrzy, + nazwa nad głową.
+## Model robotnika (z Blendera, assets/models/characters/worker.glb) jako ciało gracza.
+## Graczy rozróżniają podpisy nad głowami.
+func _build_body() -> void:
+	_body = WORKER_SCENE.instantiate() as WorkerRig
+	_body.name = "Body"
+	add_child(_body)
+
+
+## Nazwa nad głową cudzej postaci.
 func _build_remote_visual() -> void:
 	var id: int = get_multiplayer_authority()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color.from_hsv(fmod(id * 0.37, 1.0), 0.6, 0.9)
-
-	_body_mesh = MeshInstance3D.new()
-	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.35
-	capsule.height = stand_height
-	capsule.material = mat
-	_body_mesh.mesh = capsule
-	add_child(_body_mesh)
-
-	var nose := MeshInstance3D.new()
-	var nose_mesh := BoxMesh.new()
-	nose_mesh.size = Vector3(0.15, 0.15, 0.3)
-	nose_mesh.material = mat
-	nose.mesh = nose_mesh
-	nose.position = Vector3(0, 0, -0.4)
-	head.add_child(nose)
-
 	var label := Label3D.new()
 	label.text = Net.get_player_name(id)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -614,6 +626,7 @@ func _seated_process(delta: float) -> void:
 	net_height = _capsule.height
 	net_down = false
 	net_on_floor = true
+	_animate_body(delta, true, true)
 	_update_chase_cam(delta)
 
 
@@ -641,16 +654,56 @@ func _update_interaction() -> void:
 func _update_camera() -> void:
 	if not is_local:
 		return
-	if vehicle != null and _third_person:
+	if _third_person:
 		if _chase_cam == null:
 			_chase_cam = Camera3D.new()
 			_chase_cam.top_level = true
 			_chase_cam.far = 400.0
 			add_child(_chase_cam)
+		if vehicle != null:
 			_place_chase_cam(1.0)
+		else:
+			_place_foot_cam(1.0)
 		_chase_cam.make_current()
 	else:
 		camera.make_current()
+	_set_body_first_person(not _third_person)
+
+
+## W 1. osobie własnego ciała nie widać (żeby nie zasłaniało kamery), ale rzuca cień.
+func _set_body_first_person(first_person: bool) -> void:
+	if _body == null:
+		return
+	var mode := GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if first_person \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var stack: Array[Node] = [_body]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node is GeometryInstance3D:
+			(node as GeometryInstance3D).cast_shadow = mode
+		stack.append_array(node.get_children())
+
+
+func _process(delta: float) -> void:
+	if is_local and _third_person and vehicle == null and _chase_cam != null:
+		_place_foot_cam(1.0 - exp(-14.0 * delta))
+
+
+## Kamera 3. osoby pieszo: za plecami i lekko w prawo (zza ramienia), patrzy tam,
+## gdzie głowa - celownik na środku ekranu dalej pokazuje mniej więcej to, co złapiesz.
+## Nie wchodzi w ściany: jeśli coś jest między głową a kamerą, kamera podjeżdża bliżej.
+func _place_foot_cam(blend: float) -> void:
+	var forward: Vector3 = -camera.global_basis.z
+	var right: Vector3 = camera.global_basis.x
+	var pivot: Vector3 = global_position + Vector3.UP * lerpf(tp_height, 0.6, _down_blend)
+	var target: Vector3 = pivot - forward * tp_distance + right * tp_shoulder
+	var query := PhysicsRayQueryParameters3D.create(pivot, target, 1)  # tylko świat
+	query.exclude = [get_rid()]
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		target = (hit["position"] as Vector3) + (pivot - target).normalized() * 0.2
+	_chase_cam.global_position = _chase_cam.global_position.lerp(target, blend)
+	_chase_cam.look_at(_chase_cam.global_position + forward)
 
 
 func _update_chase_cam(delta: float) -> void:
