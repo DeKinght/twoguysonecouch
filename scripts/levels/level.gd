@@ -34,6 +34,7 @@ func _spawn_player(data: Dictionary) -> Node:
 	var id: int = data["id"]
 	player.name = str(id)
 	player.position = data["pos"]
+	player.skin = data.get("skin", -1)
 	player.set_multiplayer_authority(id)  # przed add_child, żeby _ready znało autorytet
 	return player
 
@@ -41,8 +42,11 @@ func _spawn_player(data: Dictionary) -> Node:
 func _spawn_all_players() -> void:
 	var ids: Array[int] = [1]
 	ids.append_array(multiplayer.get_peers())
+	# Każdy gracz dostaje losowy wygląd postaci, bez powtórek (dopóki starczy wariantów).
+	var skins: Array = range(CharacterModel.VARIANTS.size())
+	skins.shuffle()
 	for i in ids.size():
-		spawner.spawn({"id": ids[i], "pos": _spawn_pos(i)})
+		spawner.spawn({"id": ids[i], "pos": _spawn_pos(i), "skin": skins[i % skins.size()]})
 
 
 func _spawn_pos(index: int) -> Vector3:
