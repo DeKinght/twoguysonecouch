@@ -159,7 +159,10 @@ func _refresh_crosshair() -> void:
 
 func _refresh_prompt() -> void:
 	var text: String = ""
-	if grabber.held != null and is_instance_valid(grabber.held):
+	var player := get_parent() as Player
+	if player != null and player.vehicle != null:
+		text = player.interact_hint
+	elif grabber.held != null and is_instance_valid(grabber.held):
 		var h: Grabbable = grabber.held
 		text = "Trzymasz: %s   •   %.0f kg%s        kółko myszy: odległość" \
 				% [h.item_name, h.mass, _price(h)]
@@ -169,6 +172,8 @@ func _refresh_prompt() -> void:
 				% [Settings.event_text("grab"), l.item_name, l.mass, _price(l)]
 	elif _usable() != null:
 		text = "[%s]  %s" % [Settings.event_text("interact"), _usable().interact_text()]
+	elif player != null and player.interact_hint != "":
+		text = player.interact_hint
 	_prompt.text = text
 	_prompt_panel.visible = text != ""
 

@@ -54,6 +54,8 @@ func _on_peer_ready(id: int) -> void:
 		return
 	for item: Grabbable in get_tree().get_nodes_in_group("grabbables"):
 		item.net_sync.set_visibility_for(id, true)
+	for vehicle: Van in get_tree().get_nodes_in_group("vehicles"):
+		vehicle.net_sync.set_visibility_for(id, true)
 
 
 func _on_peer_left(id: int) -> void:

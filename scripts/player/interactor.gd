@@ -15,7 +15,8 @@ var looked_at: Node = null
 
 
 func _physics_process(_delta: float) -> void:
-	if Settings.input_blocked() or (player != null and player.is_down()):
+	# W aucie E znaczy "wysiądź" (obsługuje to Player), więc niczego innego nie celujemy.
+	if Settings.input_blocked() or (player != null and (player.is_down() or player.vehicle != null)):
 		looked_at = null
 		return
 	var from: Vector3 = camera.global_position

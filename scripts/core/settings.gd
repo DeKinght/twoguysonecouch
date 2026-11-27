@@ -17,8 +17,9 @@ const ACTIONS: Array = [
 	["sprint", "Sprint"],
 	["crouch", "Kucanie"],
 	["grab", "Chwyć / trzymaj"],
-	["interact", "Użyj (drzwi, brama)"],
+	["interact", "Użyj (drzwi, brama, auto)"],
 	["shove", "Popchnij kumpla"],
+	["camera_toggle", "Kamera w aucie (1. / 3. osoba)"],
 ]
 
 const KEY_NAMES: Dictionary = {
