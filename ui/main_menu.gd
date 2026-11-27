@@ -170,7 +170,9 @@ func _build_layout() -> void:
 	spacer.custom_minimum_size = Vector2(0, 12)
 	column.add_child(spacer)
 
+	# Strony zajmują miejsce między logo a stopką; ustawienia rozciągają się do dołu i się przewijają.
 	var page_host := VBoxContainer.new()
+	page_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(page_host)
 	_pages[Page.MAIN] = _build_main_page()
 	_pages[Page.JOIN] = _build_join_page()
@@ -180,10 +182,6 @@ func _build_layout() -> void:
 	for page: Control in _pages.values():
 		page.visible = false
 		page_host.add_child(page)
-
-	var filler := Control.new()
-	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(filler)
 
 	var footer := Label.new()
 	footer.theme_type_variation = "MutedLabel"
@@ -387,10 +385,12 @@ func _build_lobby_page() -> Control:
 
 func _build_settings_page() -> Control:
 	var parts: Array = _page("USTAWIENIA")
+	var panel: PanelContainer = parts[0]
 	var box: VBoxContainer = parts[1]
-	box.add_child(SettingsPanel.new())
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL  # do dołu ekranu (nad stopką)
+	box.add_child(SettingsPanel.wrap_in_scroll())
 	box.add_child(_button("WRÓĆ", "", func() -> void: _show(Page.MAIN)))
-	return parts[0]
+	return panel
 
 
 func _build_lan_page() -> Control:

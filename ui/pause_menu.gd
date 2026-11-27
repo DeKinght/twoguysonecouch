@@ -106,7 +106,7 @@ func _build_settings_page() -> VBoxContainer:
 	title.text = "USTAWIENIA"
 	title.theme_type_variation = "TitleLabel"
 	page.add_child(title)
-	page.add_child(SettingsPanel.new())
+	page.add_child(SettingsPanel.wrap_in_scroll(540.0))
 	page.add_child(_button("WRÓĆ", "", _show_main))
 	return page
 

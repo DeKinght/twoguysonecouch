@@ -9,6 +9,25 @@ var _bind_buttons: Dictionary = {}  ## akcja -> Button
 var _listening: String = ""
 
 
+## Panel ustawień w przewijanym obszarze, który zajmuje dostępne miejsce w pionie.
+## min_height = 0: kurczy się do miejsca, jakie zostało (menu główne);
+## min_height > 0: stała wysokość (menu pauzy na środku ekranu).
+static func wrap_in_scroll(min_height: float = 0.0) -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(0, min_height)
+	# Odstęp od paska przewijania, żeby nie nachodził na przyciski klawiszy.
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_right", 18)
+	scroll.add_child(margin)
+	var panel := SettingsPanel.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(panel)
+	return scroll
+
+
 func _ready() -> void:
 	add_theme_constant_override("separation", 12)
 	custom_minimum_size = Vector2(560, 0)
@@ -30,6 +49,7 @@ func _ready() -> void:
 	_sens_slider.step = 0.05
 	_sens_slider.value = Settings.sensitivity_mult
 	_sens_slider.custom_minimum_size = Vector2(0, 28)
+	_sens_slider.scrollable = false  # kółko myszy przewija listę, a nie zmienia czułości
 	_sens_slider.value_changed.connect(_on_sensitivity_changed)
 	add_child(_sens_slider)
 
@@ -46,17 +66,13 @@ func _ready() -> void:
 	hint.theme_type_variation = "MutedLabel"
 	add_child(hint)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 300)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
-
+	# Bez własnego przewijania - całość panelu przewija rodzic (SettingsPanel.wrap_in_scroll).
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 24)
 	grid.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(grid)
+	add_child(grid)
 
 	for entry: Array in Settings.ACTIONS:
 		var action: String = entry[0]
