@@ -433,8 +433,6 @@ func _build_decor() -> void:
 			[["piggy_bank", -0.35], ["book_stack", 0.0], ["bowling_pin", 0.35]])
 
 	# Podłoga.
-	_decor("plant_monstera", Vector3(11.55, 0.0, 4.3), 0.0)        # przy kanapie
-	_decor("plant_fern", Vector3(12.85, 0.0, 6.2), 0.0)            # przy drzwiach do sklepu
 	_decor("plant_fern", Vector3(0.42, 0.0, 0.42), 1.0)            # w rogu WC
 	_decor("traffic_cone", Vector3(8.3, 0.0, 6.1), 0.3)            # przy miejscu na busa
 	_decor("traffic_cone", Vector3(8.3, 0.0, 9.9), -0.2)
