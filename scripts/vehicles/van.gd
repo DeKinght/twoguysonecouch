@@ -605,12 +605,14 @@ func _build_cab_interior() -> void:
 		return [Vector3(x0, y0, z0) * S, Vector3(x1, y1, z1) * S]
 
 	var parts: Array = [
-		# Wymiary dopasowane do skorupy kabiny: boki ~±0.6, dół przedniej szyby przy z ~1.09,
-		# niżej zaczyna się maska - nic nie może wystawać na zewnątrz.
-		[u.call(-0.58, CAB_FLOOR_U - 0.03, 0.47, 0.58, CAB_FLOOR_U, 1.06), dark],     # podłoga
-		[u.call(-0.6, CAB_FLOOR_U, 0.45, 0.6, 1.3, 0.47), trim],                      # tył kabiny
-		[u.call(-0.57, 0.64, 0.98, 0.57, 0.77, 1.07), dash],                          # deska
-		[u.call(-0.57, CAB_FLOOR_U, 1.0, 0.57, 0.64, 1.07), dark],                    # pod deską
+		# Wymiary dopasowane do skorupy kabiny (zmierzone w modelu): boki ~±0.53, dół przedniej
+		# szyby przy z ~1.09, a nisko (y < 0.62) od z = 0.78 do przodu są nadkola - tam
+		# wnętrze ma tylko ±0.33, inaczej widać je przez wycięcie na koło.
+		[u.call(-0.5, CAB_FLOOR_U - 0.03, 0.47, 0.5, CAB_FLOOR_U, 0.78), dark],       # podłoga przy fotelach
+		[u.call(-0.32, CAB_FLOOR_U - 0.03, 0.78, 0.32, CAB_FLOOR_U, 1.06), dark],     # podłoga między nadkolami
+		[u.call(-0.52, CAB_FLOOR_U, 0.45, 0.52, 1.3, 0.47), trim],                    # tył kabiny
+		[u.call(-0.52, 0.67, 0.98, 0.52, 0.77, 1.07), dash],                          # deska
+		[u.call(-0.32, CAB_FLOOR_U, 1.0, 0.32, 0.67, 1.07), dark],                    # pod deską
 		[u.call(-0.12, CAB_FLOOR_U, 0.5, 0.12, 0.6, 0.95), dark],                     # tunel
 	]
 	for side: float in [1.0, -1.0]:
