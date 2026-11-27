@@ -27,6 +27,8 @@ var screen_size: Vector2 = Vector2(0.6, 0.36)
 var user_id: int = 0
 var accepted_job: String = ""
 var accepted_by: int = 0
+## Ziarno losowego świata dla przyjętego zlecenia (losuje host, 0 = brak).
+var world_seed: int = 0
 
 var _glow: StandardMaterial3D
 var _screen_ui: ComputerScreen
@@ -133,36 +135,37 @@ func _rpc_request_accept(job_id: String) -> void:
 
 func _server_request_use(peer_id: int) -> void:
 	if user_id == 0:
-		_broadcast(peer_id, accepted_job, accepted_by)
+		_broadcast(peer_id, accepted_job, accepted_by, world_seed)
 
 
 func _server_leave(peer_id: int) -> void:
 	if user_id == peer_id:
-		_broadcast(0, accepted_job, accepted_by)
+		_broadcast(0, accepted_job, accepted_by, world_seed)
 
 
 func _server_accept(peer_id: int, job_id: String) -> void:
 	if user_id == peer_id and accepted_job == "" and not get_job(job_id).is_empty():
-		_broadcast(user_id, job_id, peer_id)
+		_broadcast(user_id, job_id, peer_id, randi_range(1, 2147483646))
 
 
 func _server_on_peer_left(peer_id: int) -> void:
 	_server_leave(peer_id)
 
 
-func _broadcast(user: int, job: String, by: int) -> void:
+func _broadcast(user: int, job: String, by: int, seed: int) -> void:
 	if multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
-		_rpc_set_state(user, job, by)
+		_rpc_set_state(user, job, by, seed)
 	else:
-		_rpc_set_state.rpc(user, job, by)
+		_rpc_set_state.rpc(user, job, by, seed)
 
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_set_state(user: int, job: String, by: int) -> void:
+func _rpc_set_state(user: int, job: String, by: int, seed: int) -> void:
 	var was_me: bool = user_id == multiplayer.get_unique_id()
 	user_id = user
 	accepted_job = job
 	accepted_by = by
+	world_seed = seed
 	var is_me: bool = user_id != 0 and user_id == multiplayer.get_unique_id()
 	if is_me and not was_me:
 		_open_screen()

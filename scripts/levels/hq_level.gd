@@ -258,6 +258,20 @@ func _build_office() -> void:
 		pc.global_transform = monitor.global_transform
 		var m: Vector3 = monitor.get_meta("size")
 		pc.setup(Vector2(m.x * 0.86, m.y * 0.56), Vector3(0.0, m.y * 0.6, m.z * 0.5 - 0.035))
+		# Po przyjęciu zlecenia wokół Siedziby powstaje losowe miasto (to samo u wszystkich).
+		pc.state_changed.connect(func() -> void: _on_job_state(pc))
+
+
+var world: WorldGenerator
+
+
+func _on_job_state(pc: JobComputer) -> void:
+	if world != null or pc.accepted_job == "" or pc.world_seed == 0:
+		return
+	world = WorldGenerator.new()
+	world.name = "World"
+	add_child(world)
+	world.generate(pc.world_seed)
 
 
 ## Żółte regały dekoracyjne pełne kartonów.
@@ -419,8 +433,6 @@ func _build_decor() -> void:
 			[["piggy_bank", -0.35], ["book_stack", 0.0], ["bowling_pin", 0.35]])
 
 	# Podłoga.
-	_decor("plant_monstera", Vector3(11.55, 0.0, 4.3), 0.0)        # przy kanapie
-	_decor("plant_fern", Vector3(12.85, 0.0, 6.2), 0.0)            # przy drzwiach do sklepu
 	_decor("plant_fern", Vector3(0.42, 0.0, 0.42), 1.0)            # w rogu WC
 	_decor("traffic_cone", Vector3(8.3, 0.0, 6.1), 0.3)            # przy miejscu na busa
 	_decor("traffic_cone", Vector3(8.3, 0.0, 9.9), -0.2)
