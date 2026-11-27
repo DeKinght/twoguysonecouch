@@ -77,6 +77,8 @@ var net_down: bool = false
 var net_on_floor: bool = true
 
 var is_local: bool = true
+## "Użyj" (E) - tylko u lokalnego gracza.
+var interactor: Interactor = null
 
 ## Auto, w którym siedzimy (null = idziemy pieszo), i numer miejsca (Van.SEAT_*).
 ## Miejsca przydziela host (Van.net_seats) - tu tylko za tym nadążamy.
@@ -132,6 +134,10 @@ func _ready() -> void:
 	_setup_footsteps()
 
 	if is_local:
+		interactor = Interactor.new()
+		interactor.name = "Interactor"
+		interactor.player = self
+		camera.add_child(interactor)
 		camera.make_current()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	else:
@@ -523,6 +529,8 @@ func _sync_vehicle_state() -> void:
 func _on_interact() -> void:
 	if vehicle != null:
 		vehicle.request_exit()
+	elif interactor != null and is_instance_valid(interactor.looked_at):
+		return  # E obsługuje Interactor (drzwi, brama...)
 	elif _interact_van != null and is_instance_valid(_interact_van):
 		_interact_van.request_interact(_interact_action)
 
