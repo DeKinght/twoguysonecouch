@@ -27,7 +27,7 @@ ui/hud.gd                 Celownik i podpowiedź
 ```
 
 ## Sterowanie
-WASD, Shift sprint, Spacja skok, Ctrl/C kucanie, LPM (trzymaj) chwyt, kółko myszy odległość, Esc zwalnia mysz.
+WASD, Shift sprint, Spacja skok, Ctrl/C kucanie, LPM (trzymaj) chwyt, kółko myszy odległość, B popchnij kumpla, Esc menu (ustawienia: głośność, czułość, klawisze), F11 pełny ekran.
 
 ## Mapa i modele
 Host wybiera mapę w lobby (lista `Net.LEVELS`: Blok albo Dom). Mebel do noszenia: wstaw `grabbable.tscn`,
