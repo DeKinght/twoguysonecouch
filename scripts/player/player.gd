@@ -61,6 +61,13 @@ const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
 @export_group("Sieć")
 @export var remote_smoothing: float = 20.0
 
+@export_group("Pojazdy")
+## Z jakiej odległości można wsiąść / otworzyć drzwi auta.
+@export var interact_reach: float = 3.0
+## Kamera 3. osoby za autem: odległość i wysokość.
+@export var chase_distance: float = 11.0
+@export var chase_height: float = 5.0
+
 ## Replikowane do pozostałych graczy:
 var net_position: Vector3
 var net_yaw: float = 0.0
@@ -70,6 +77,18 @@ var net_down: bool = false
 var net_on_floor: bool = true
 
 var is_local: bool = true
+
+## Auto, w którym siedzimy (null = idziemy pieszo), i numer miejsca (Van.SEAT_*).
+## Miejsca przydziela host (Van.net_seats) - tu tylko za tym nadążamy.
+var vehicle: Van = null
+var seat: int = -1
+## Podpowiedź dla HUD-a ("[E] Wsiądź za kierownicę" itp.).
+var interact_hint: String = ""
+var _interact_van: Van = null
+var _interact_action: String = ""
+var _seat_yaw: float = 0.0
+var _third_person: bool = false
+var _chase_cam: Camera3D
 
 var _pitch: float = 0.0
 var _crouching: bool = false
@@ -139,6 +158,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _down_timer > 0.0:
 			return
 		var sens: float = mouse_sensitivity * Settings.sensitivity_mult
+		if vehicle != null:
+			_seat_yaw = wrapf(_seat_yaw - event.relative.x * sens, -PI, PI)
+			_pitch = clampf(_pitch - event.relative.y * sens, -1.3, 1.3)
+			head.rotation.x = _pitch
+			return
 		rotate_y(-event.relative.x * sens)
 		_pitch = clampf(_pitch - event.relative.y * sens, -1.5, 1.5)
 		head.rotation.x = _pitch
@@ -150,6 +174,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not is_local:
 		_remote_update(delta)
+		return
+
+	_sync_vehicle_state()
+	if Input.is_action_just_pressed("interact") and not Settings.input_blocked() and _down_timer <= 0.0:
+		_on_interact()
+	if vehicle != null:
+		_seated_process(delta)
 		return
 
 	_read_input()
@@ -195,6 +226,7 @@ func _physics_process(delta: float) -> void:
 	net_down = _down_timer > 0.0
 	net_on_floor = is_on_floor()
 	_update_footsteps(delta, net_on_floor)
+	_update_interaction()
 
 
 func _read_input() -> void:
@@ -253,7 +285,7 @@ func _update_down(delta: float) -> void:
 
 ## Wykonuje się na kliencie-właścicielu tej postaci.
 func knock_down(impulse: Vector3, duration: float) -> void:
-	if not is_local or _down_timer > 0.0:
+	if not is_local or _down_timer > 0.0 or vehicle != null:
 		return
 	_down_timer = duration
 	net_down = true
@@ -401,6 +433,17 @@ func _play_step(gait: int, extra_db: float) -> void:
 
 
 func _remote_update(delta: float) -> void:
+	# Siedzący gracz: stawiamy go na miejscu w NASZEJ kopii auta (bez opóźnienia i drgań).
+	var found: Array = _find_my_seat()
+	if not found.is_empty():
+		var van: Van = found[0]
+		collision.disabled = true
+		global_position = van.seat_transform(found[1]).origin
+		rotation.y = lerp_angle(rotation.y, net_yaw, 1.0 - exp(-remote_smoothing * delta))
+		head.rotation.x = net_pitch
+		_apply_height(lerpf(_capsule.height, net_height, 0.3))
+		return
+	collision.disabled = false
 	var t: float = 1.0 - exp(-remote_smoothing * delta)
 	global_position = global_position.lerp(net_position, t)
 	rotation.y = lerp_angle(rotation.y, net_yaw, t)
@@ -453,3 +496,165 @@ func _build_remote_visual() -> void:
 	label.pixel_size = 0.005
 	label.position = Vector3(0, stand_height + 0.4, 0)
 	add_child(label)
+
+
+# --- Auto ------------------------------------------------------------------------
+
+## [Van, miejsce] albo [] - na podstawie net_seats każdego auta (stan od hosta).
+func _find_my_seat() -> Array:
+	var my_id: int = get_multiplayer_authority()
+	for node in get_tree().get_nodes_in_group("vehicles"):
+		var van := node as Van
+		var i: int = van.seat_of(my_id)
+		if i >= 0:
+			return [van, i]
+	return []
+
+
+func _sync_vehicle_state() -> void:
+	var found: Array = _find_my_seat()
+	if found.is_empty():
+		if vehicle != null:
+			_leave_seat()
+	elif found[0] != vehicle or found[1] != seat:
+		_enter_seat(found[0], found[1])
+
+
+func _on_interact() -> void:
+	if vehicle != null:
+		vehicle.request_exit()
+	elif _interact_van != null and is_instance_valid(_interact_van):
+		_interact_van.request_interact(_interact_action)
+
+
+func _enter_seat(van: Van, seat_index: int) -> void:
+	vehicle = van
+	seat = seat_index
+	collision.disabled = true
+	velocity = Vector3.ZERO
+	grabber.release()
+	_crouching = false
+	_seat_yaw = 0.0
+	_third_person = seat_index == Van.SEAT_DRIVER
+	_update_camera()
+
+
+func _leave_seat() -> void:
+	var van: Van = vehicle
+	var old_seat: int = seat
+	vehicle = null
+	seat = -1
+	collision.disabled = false
+	velocity = Vector3.ZERO
+	var yaw: float = global_basis.get_euler().y
+	global_basis = Basis(Vector3.UP, yaw)
+	if is_instance_valid(van):
+		var points: Array[Vector3] = van.exit_points(old_seat)
+		global_position = points[0]
+		for p in points:
+			if _space_free(p):
+				global_position = p
+				break
+	_third_person = false
+	_update_camera()
+
+
+func _space_free(feet: Vector3) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	var shape := CapsuleShape3D.new()
+	shape.radius = _capsule.radius
+	shape.height = stand_height
+	query.shape = shape
+	query.transform = Transform3D(Basis(), feet + Vector3.UP * (stand_height * 0.5 + 0.05))
+	query.collision_mask = 1 | 4
+	query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+func _seated_process(delta: float) -> void:
+	if not is_instance_valid(vehicle):
+		_leave_seat()
+		return
+	if Input.is_action_just_pressed("camera_toggle") and not Settings.input_blocked():
+		_third_person = not _third_person
+		_update_camera()
+
+	var t: Transform3D = vehicle.seat_transform(seat)
+	global_basis = t.basis * Basis(Vector3.UP, _seat_yaw)
+	global_position = t.origin
+	_apply_height(move_toward(_capsule.height, crouch_height, 6.0 * delta))
+
+	var keys: String = "[%s] Wysiądź   •   [%s] Kamera" % [Settings.event_text("interact"), Settings.event_text("camera_toggle")]
+	if seat == Van.SEAT_DRIVER:
+		var throttle: float = 0.0
+		var steer: float = 0.0
+		var handbrake: bool = false
+		if not Settings.input_blocked():
+			throttle = Input.get_axis("move_back", "move_forward")
+			steer = Input.get_axis("move_right", "move_left")
+			handbrake = Input.is_action_pressed("jump")
+		vehicle.send_drive_input(throttle, steer, handbrake)
+		interact_hint = "%d km/h   •   %s/%s gaz/hamulec   •   %s ręczny   •   %s" % [
+			roundi(vehicle.speed_kmh()), Settings.event_text("move_forward"), Settings.event_text("move_back"),
+			Settings.event_text("jump"), keys]
+	else:
+		interact_hint = keys
+
+	net_position = global_position
+	net_yaw = rotation.y
+	net_pitch = _pitch
+	net_height = _capsule.height
+	net_down = false
+	net_on_floor = true
+	_update_chase_cam(delta)
+
+
+func _update_interaction() -> void:
+	interact_hint = ""
+	_interact_van = null
+	if grabber.is_holding() or _down_timer > 0.0:
+		return
+	var from: Vector3 = camera.global_position
+	var dir: Vector3 = -camera.global_basis.z
+	var my_id: int = get_multiplayer_authority()
+	var best_distance: float = INF
+	for node in get_tree().get_nodes_in_group("vehicles"):
+		var van := node as Van
+		if van.global_position.distance_to(global_position) > 14.0:
+			continue
+		var hit: Dictionary = van.find_interaction(from, dir, interact_reach, my_id)
+		if not hit.is_empty() and float(hit["distance"]) < best_distance:
+			best_distance = hit["distance"]
+			_interact_van = van
+			_interact_action = hit["id"]
+			interact_hint = "[%s]  %s" % [Settings.event_text("interact"), hit["text"]]
+
+
+func _update_camera() -> void:
+	if not is_local:
+		return
+	if vehicle != null and _third_person:
+		if _chase_cam == null:
+			_chase_cam = Camera3D.new()
+			_chase_cam.top_level = true
+			_chase_cam.far = 400.0
+			add_child(_chase_cam)
+			_place_chase_cam(1.0)
+		_chase_cam.make_current()
+	else:
+		camera.make_current()
+
+
+func _update_chase_cam(delta: float) -> void:
+	if _chase_cam != null and _third_person:
+		_place_chase_cam(1.0 - exp(-6.0 * delta))
+
+
+func _place_chase_cam(blend: float) -> void:
+	var vt: Transform3D = vehicle.global_transform
+	var forward: Vector3 = vt.basis.z
+	forward.y = 0.0
+	forward = forward.normalized().rotated(Vector3.UP, _seat_yaw)
+	var target: Vector3 = vt.origin - forward * chase_distance + Vector3.UP * (chase_height - _pitch * 4.0)
+	_chase_cam.global_position = _chase_cam.global_position.lerp(target, blend)
+	_chase_cam.look_at(vt.origin + Vector3.UP * 2.0 + forward * 2.0)

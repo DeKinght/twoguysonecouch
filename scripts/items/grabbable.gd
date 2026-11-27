@@ -295,6 +295,18 @@ func _stop_syncing() -> void:
 
 
 func _blame_id(now: float) -> int:
+	var id: int = _holder_blame_id(now)
+	if id != 0:
+		return id
+	# Nikt nie trzymał, ale przedmiot jedzie w pace - winny kierowca.
+	for vehicle in get_tree().get_nodes_in_group("vehicles"):
+		id = vehicle.blame_for_item(self)
+		if id != 0:
+			return id
+	return 0
+
+
+func _holder_blame_id(now: float) -> int:
 	if not holders.is_empty():
 		return holders.keys()[0]
 	if now - _last_release_time < BLAME_WINDOW:

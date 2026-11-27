@@ -18,6 +18,8 @@ const ACTIONS: Array = [
 	["crouch", "Kucanie"],
 	["grab", "Chwyć / trzymaj"],
 	["shove", "Popchnij kumpla"],
+	["interact", "Wsiądź / wysiądź / drzwi auta"],
+	["camera_toggle", "Kamera w aucie (1. / 3. osoba)"],
 ]
 
 const KEY_NAMES: Dictionary = {

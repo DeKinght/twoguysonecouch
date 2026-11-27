@@ -63,6 +63,10 @@ func _physics_process(_delta: float) -> void:
 	var player := owner as Player
 	if player != null and player.is_down():
 		return  # leżący gracz niczego nie łapie (przewrócenie samo puszcza przedmiot)
+	if player != null and player.vehicle != null:
+		release()  # w aucie się nie nosi
+		looked_at = null
+		return
 
 	if held == null:
 		_update_look_target()

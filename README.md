@@ -29,7 +29,17 @@ ui/hud.gd                 Celownik i podpowiedź
 ## Sterowanie
 WASD, Shift sprint, Spacja skok, Ctrl/C kucanie, LPM (trzymaj) chwyt, kółko myszy odległość, B popchnij kumpla, Esc menu (ustawienia: głośność, czułość, klawisze), F11 pełny ekran.
 
+Auto: E patrząc na drzwi kabiny = wsiądź (kierowca po lewej, pasażer po prawej), E patrząc na tył paki = otwórz/zamknij
+(otwarte drzwi robią za rampę), E patrząc na półkę w pace = usiądź (2 miejsca). W aucie: W gaz, S hamulec / wsteczny,
+A/D skręt, Spacja ręczny, V kamera 1./3. osoby, E wysiądź.
+
+## Auto (`scenes/vehicles/van.tscn`, `scripts/vehicles/van.gd`)
+Dostawczak z Kenney Car Kit (`delivery.glb`, skala 2,3) na `VehicleBody3D`: napęd na tył, 2,5 t, ~0-40 km/h w 6 s,
+hamowanie ~6 m/s², maks. 70 km/h. Fizykę liczy host, kierowca wysyła mu tylko wejście; miejsca (`net_seats`) i drzwi
+też zmienia host. Paka (`cargo_zone`) to strefa załadunku zlecenia; szkody przedmiotów w pace, których nikt nie trzyma,
+idą na konto kierowcy. Potrącenie przy > 3 m/s przewraca gracza.
+
 ## Mapa i modele
-Host wybiera mapę w lobby (lista `Net.LEVELS`: Blok albo Dom). Mebel do noszenia: wstaw `grabbable.tscn`,
+Host wybiera mapę w lobby (lista `Net.LEVELS`). Mebel do noszenia: wstaw `grabbable.tscn`,
 ustaw `model` (plik .glb z `assets/models/furniture/`), `item_name`, `mass`, `value`. Modele Kenney
 mają skalę ~1:2, stąd domyślne `model_scale = 2`.
