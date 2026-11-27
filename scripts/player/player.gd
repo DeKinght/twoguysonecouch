@@ -61,6 +61,10 @@ const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
 @export_group("Sieć")
 @export var remote_smoothing: float = 20.0
 
+@export_group("Spadnięcie z mapy")
+## Poniżej tej wysokości gracz wraca na punkt startowy mapy (w Siedzibie: do budynku).
+@export var fall_respawn_y: float = -15.0
+
 @export_group("Pojazdy")
 ## Z jakiej odległości można wsiąść / otworzyć drzwi auta.
 @export var interact_reach: float = 3.0
@@ -75,6 +79,13 @@ var net_pitch: float = 0.0
 var net_height: float = 1.8
 var net_down: bool = false
 var net_on_floor: bool = true
+var net_holding: bool = false
+
+## Wygląd postaci (indeks w CharacterModel.VARIANTS). Losuje host przy spawnie; -1 = losuj lokalnie.
+var skin: int = -1
+## Warstwa renderowania własnej postaci - kamera FPP jej nie widzi (widać tylko cień i kamerę zza auta).
+const OWN_BODY_LAYER: int = 1 << 9
+var _model: CharacterModel
 
 var is_local: bool = true
 ## "Użyj" (E) - tylko u lokalnego gracza.
@@ -132,8 +143,10 @@ func _ready() -> void:
 	net_height = stand_height
 	_setup_sync()
 	_setup_footsteps()
+	_build_model()
 
 	if is_local:
+		camera.cull_mask &= ~OWN_BODY_LAYER
 		interactor = Interactor.new()
 		interactor.name = "Interactor"
 		interactor.player = self
@@ -221,6 +234,9 @@ func _physics_process(delta: float) -> void:
 
 	var vy_before: float = velocity.y
 	move_and_slide()
+	if global_position.y < fall_respawn_y:
+		_respawn()
+		return
 	if not was_on_floor and is_on_floor() and vy_before < -fall_knockdown_speed:
 		knock_down(Vector3.ZERO, down_duration)
 	_push_bodies()
@@ -231,8 +247,10 @@ func _physics_process(delta: float) -> void:
 	net_height = _capsule.height
 	net_down = _down_timer > 0.0
 	net_on_floor = is_on_floor()
+	net_holding = grabber.is_holding()
 	_update_footsteps(delta, net_on_floor)
 	_update_interaction()
+	_update_model(false)
 
 
 func _read_input() -> void:
@@ -267,6 +285,9 @@ func _apply_height(height: float) -> void:
 	collision.position.y = height * 0.5
 	head.position.y = lerpf(height - eye_offset, 0.35, _down_blend)
 	head.rotation.z = _down_blend * 1.2
+	if _model != null:
+		_model.rotation.z = _down_blend * PI * 0.5
+		_model.position.y = _down_blend * 0.3
 	if _body_mesh != null:
 		(_body_mesh.mesh as CapsuleMesh).height = height
 		_body_mesh.position.y = lerpf(height * 0.5, 0.4, _down_blend)
@@ -448,6 +469,7 @@ func _remote_update(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, net_yaw, 1.0 - exp(-remote_smoothing * delta))
 		head.rotation.x = net_pitch
 		_apply_height(lerpf(_capsule.height, net_height, 0.3))
+		_update_model(true)
 		return
 	collision.disabled = false
 	var t: float = 1.0 - exp(-remote_smoothing * delta)
@@ -457,11 +479,12 @@ func _remote_update(delta: float) -> void:
 	_down_blend = move_toward(_down_blend, 1.0 if net_down else 0.0, 3.0 * delta)
 	_apply_height(lerpf(_capsule.height, net_height, t))
 	_update_footsteps(delta, net_on_floor)
+	_update_model(false)
 
 
 func _setup_sync() -> void:
 	var cfg := SceneReplicationConfig.new()
-	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down", ":net_on_floor"]:
+	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down", ":net_on_floor", ":net_holding"]:
 		var path := NodePath(prop)
 		cfg.add_property(path)
 		cfg.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
@@ -474,28 +497,28 @@ func _setup_sync() -> void:
 	add_child(sync)
 
 
-## Kapsuła + "nos" pokazujący, gdzie ktoś patrzy, + nazwa nad głową.
+## Postać (model ze szkieletem) dla każdego gracza. Własną widać tylko w kamerze zza auta i po cieniu.
+func _build_model() -> void:
+	_model = CharacterModel.new()
+	_model.name = "Model"
+	add_child(_model)
+	_model.setup(skin if skin >= 0 else randi() % CharacterModel.VARIANTS.size())
+	if is_local:
+		_model.set_render_layers(OWN_BODY_LAYER)
+
+
+func _update_model(seated: bool) -> void:
+	if _model == null:
+		return
+	var crouch: float = clampf((stand_height - net_height) / maxf(stand_height - crouch_height, 0.01), 0.0, 1.0)
+	seated = seated or vehicle != null
+	_model.update_state(0.0 if seated else _ground_speed, 0.0 if seated else crouch, net_on_floor,
+			net_down, net_holding, seated)
+
+
+## Nazwa nad głową cudzej postaci.
 func _build_remote_visual() -> void:
 	var id: int = get_multiplayer_authority()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color.from_hsv(fmod(id * 0.37, 1.0), 0.6, 0.9)
-
-	_body_mesh = MeshInstance3D.new()
-	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.35
-	capsule.height = stand_height
-	capsule.material = mat
-	_body_mesh.mesh = capsule
-	add_child(_body_mesh)
-
-	var nose := MeshInstance3D.new()
-	var nose_mesh := BoxMesh.new()
-	nose_mesh.size = Vector3(0.15, 0.15, 0.3)
-	nose_mesh.material = mat
-	nose.mesh = nose_mesh
-	nose.position = Vector3(0, 0, -0.4)
-	head.add_child(nose)
-
 	var label := Label3D.new()
 	label.text = Net.get_player_name(id)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -614,6 +637,8 @@ func _seated_process(delta: float) -> void:
 	net_height = _capsule.height
 	net_down = false
 	net_on_floor = true
+	net_holding = false
+	_update_model(true)
 	_update_chase_cam(delta)
 
 
@@ -666,3 +691,18 @@ func _place_chase_cam(blend: float) -> void:
 	var target: Vector3 = vt.origin - forward * chase_distance + Vector3.UP * (chase_height - _pitch * 4.0)
 	_chase_cam.global_position = _chase_cam.global_position.lerp(target, blend)
 	_chase_cam.look_at(vt.origin + Vector3.UP * 2.0 + forward * 2.0)
+
+
+## Spadliśmy pod mapę: wracamy na swój punkt startowy poziomu (SpawnPoints).
+func _respawn() -> void:
+	velocity = Vector3.ZERO
+	# Gracz siedzi w <poziom>/Players, więc punkty startowe są u "dziadka".
+	var level: Node = get_parent().get_parent() if get_parent() != null else null
+	var points: Node = level.get_node_or_null("SpawnPoints") if level != null else null
+	var target := Vector3(0, 2, 0)
+	if points != null and points.get_child_count() > 0:
+		var index: int = maxi(0, Net.ready_peers.find(get_multiplayer_authority()))
+		target = (points.get_child(index % points.get_child_count()) as Node3D).global_position
+	global_position = target + Vector3.UP * 0.1
+	_last_step_pos = global_position
+	net_position = global_position

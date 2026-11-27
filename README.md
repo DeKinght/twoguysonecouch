@@ -46,3 +46,11 @@ idą na konto kierowcy. Potrącenie przy > 3 m/s przewraca gracza.
 Host wybiera mapę w lobby (lista `Net.LEVELS`). Mebel do noszenia: wstaw `grabbable.tscn`,
 ustaw `model` (plik .glb z `assets/models/furniture/`), `item_name`, `mass`, `value`. Modele Kenney
 mają skalę ~1:2, stąd domyślne `model_scale = 2`.
+
+## Postacie (`scripts/player/character_model.gd`)
+6 oryginalnych tragarzy (Rudy, Zenek, Ola, Bonzo, Wiesiek, Kaśka) budowanych w kodzie: Skeleton3D z 17 kośćmi
+(biodra, kręgosłup, klatka, szyja, głowa, ramiona/przedramiona/dłonie, uda/łydki/stopy), siatka ze skinningiem
+i animacje: idle, walk, run, carry, carry_walk, crouch, crouch_walk, sit, jump, fall. Host losuje każdemu graczowi
+wygląd przy spawnie (bez powtórek) i rozsyła go w danych spawnu. Własna postać jest na warstwie 10, której nie widzi
+kamera FPP (widać ją w kamerze zza auta i po cieniu).
+
