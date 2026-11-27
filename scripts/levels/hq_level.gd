@@ -23,9 +23,13 @@ const FURNITURE: String = "res://assets/models/furniture/%s.glb"
 
 const W: float = 20.0          ## szerokość budynku (X)
 const D: float = 10.77         ## głębokość budynku (Z)
-const WALL_H: float = 3.5      ## wysokość ścian = sufit
+const WALL_H: float = 4.0      ## wysokość ścian = sufit (wyżej, żeby dostawczak wjeżdżał pod otwartą bramą)
 const T: float = 0.2           ## grubość ścian
 const DOOR_H: float = 2.1
+## Otwór bramy garażowej: od-do (Z) i wysokość. Dostawczak ma 2,8 m szerokości i 3,05 m wysokości.
+const GATE_Z0: float = 5.2
+const GATE_Z1: float = 9.96
+const GATE_H: float = 3.4
 const SILL: float = 1.0        ## parapet okna
 const WIN_TOP: float = 2.3
 
@@ -117,7 +121,7 @@ func _build_walls() -> void:
 	# Zewnętrzne: [od, do, dół otworu, góra otworu]
 	_wall(true, 0.0, -T * 0.5, W + T * 0.5, [[5.61, 7.03, SILL, WIN_TOP], [13.85, 15.09, SILL, WIN_TOP]])
 	_wall(true, D, -T * 0.5, W + T * 0.5, [[2.64, 4.59, SILL, WIN_TOP]])
-	_wall(false, 0.0, 0.0, D, [[5.49, 9.67, 0.0, 3.0]])              # brama garażowa
+	_wall(false, 0.0, 0.0, D, [[GATE_Z0, GATE_Z1, 0.0, GATE_H]])     # brama garażowa
 	_wall(false, W, 0.0, D, [[7.62, 8.94, SILL, WIN_TOP]])
 
 	# WC (lewy górny róg) z drzwiami do hali.
@@ -261,8 +265,10 @@ func _build_garage() -> void:
 	# Brama garażowa: zawias u góry otworu, na E skrzydło unosi się pod sufit (do środka).
 	var gate := Door.new()
 	gate.name = "GarageDoor"
-	gate.position = Vector3(0.0, 3.0, 7.58)
-	gate.open_rotation = Vector3(0.0, 0.0, PI * 0.48)
+	var gate_w: float = GATE_Z1 - GATE_Z0
+	gate.position = Vector3(0.0, GATE_H, (GATE_Z0 + GATE_Z1) * 0.5)
+	# Otwarta brama leży poziomo pod sufitem (na wysokości zawiasu), więc nie zahacza o auto.
+	gate.open_rotation = Vector3(0.0, 0.0, PI * 0.5)
 	gate.duration = 1.4
 	gate.label_closed = "Otwórz bramę"
 	gate.label_open = "Zamknij bramę"
@@ -276,14 +282,14 @@ func _build_garage() -> void:
 		gate_mat.uv1_scale = Vector3.ONE / 3.0  # tekstura co 3 m = żeberka ~19 cm
 	else:
 		gate_mat.albedo_color = COL_GARAGE
-	var gate_panel := gate.build_panel(Vector3(0.1, 3.0, 4.18), Vector3(0.0, -1.5, 0.0), gate_mat)
-	for i in (0 if gate_tex != null else 7):  # przetłoczenia tylko bez tekstury (ona ma własne)
+	var gate_panel := gate.build_panel(Vector3(0.1, GATE_H, gate_w), Vector3(0.0, -GATE_H * 0.5, 0.0), gate_mat)
+	for i in (0 if gate_tex != null else int(GATE_H / 0.4) - 1):  # przetłoczenia tylko bez tekstury
 		var groove := MeshInstance3D.new()
 		var groove_mesh := BoxMesh.new()
-		groove_mesh.size = Vector3(0.02, 0.05, 4.1)
+		groove_mesh.size = Vector3(0.02, 0.05, gate_w - 0.08)
 		groove.mesh = groove_mesh
 		groove.material_override = _material(COL_GARAGE.darkened(0.3))
-		groove.position = Vector3(0.06, 0.4 + i * 0.4 - 1.5, 0.0)
+		groove.position = Vector3(0.06, 0.4 + i * 0.4 - GATE_H * 0.5, 0.0)
 		gate_panel.add_child(groove)
 
 	# Drzwi do WC i do sklepu (zawias przy jednej krawędzi otworu, otwierają się do pokoju).
