@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_books" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(0.36, 0.3, 0.3)
+marker_text = "KSIĄŻKI\nCIĘŻKIE!"
+tape = 2
+variant_seed = 1

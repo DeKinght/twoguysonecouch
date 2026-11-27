@@ -71,6 +71,7 @@ var _prev_velocity: Vector3 = Vector3.ZERO
 var _last_hit_time: float = -10.0
 var _last_release_time: float = -10.0
 var _destroyed: bool = false
+var _had_value: bool = true
 
 
 func _ready() -> void:
@@ -82,6 +83,7 @@ func _ready() -> void:
 	max_contacts_reported = 8
 	_base_angular_damp = angular_damp
 	_max_value = maxf(value, 1.0)
+	_had_value = value > 0.0
 	if get_child_count() == 0:
 		if model != null:
 			_build_from_model()
@@ -294,6 +296,12 @@ func _stop_syncing() -> void:
 		net_sync.set_visibility_for(peer_id, false)
 
 
+## Czy przedmiot ma jakąkolwiek wartość od początku (przedmioty ze zleceń).
+## Bez wartości: nie liczą się do szkód, nie ciemnieją, nie niszczą się.
+func has_value() -> bool:
+	return _had_value
+
+
 func _blame_id(now: float) -> int:
 	if not holders.is_empty():
 		return holders.keys()[0]
@@ -330,6 +338,8 @@ func _setup_sync() -> void:
 
 
 func _update_visual() -> void:
+	if not has_value():
+		return  # przedmioty bez wartości (np. w siedzibie) nie ciemnieją
 	var damaged: float = 1.0 - clampf(value / _max_value, 0.0, 1.0)
 	if _material != null:
 		_material.albedo_color = color.darkened(0.6 * damaged)
@@ -379,7 +389,8 @@ func _build_from_model() -> void:
 
 
 func _collect_meshes(node: Node, out: Array[MeshInstance3D]) -> void:
-	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+	# skip_bounds: np. odchylone klapy kartonu - widać je, ale nie powiększają hitboxa.
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null and not node.has_meta("skip_bounds"):
 		out.append(node)
 	for child in node.get_children():
 		_collect_meshes(child, out)

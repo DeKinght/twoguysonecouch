@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_mystery" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(0.4, 0.4, 0.4)
+marker_text = "???\nCO TO JEST"
+tape = 3
+wear = 0.6
+variant_seed = 14

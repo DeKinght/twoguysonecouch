@@ -41,6 +41,14 @@ const COL_WOOD: Color = Color(0.55, 0.38, 0.22)
 const COL_PAINT: Color = Color(1.0, 0.85, 0.2)
 ## Jak gęsto stoją kartony na regałach (0..1).
 const RACK_FILL: float = 0.28
+## Jak często zamiast pustego miejsca na regale stoi drobiazg (0..1).
+const RACK_DECOR: float = 0.18
+
+## Kolor świetlówek (ciepły, żółtawy) i ich losowe mruganie.
+const LAMP_COLOR: Color = Color(1.0, 0.82, 0.52)
+const FLICKER_MIN: float = 3.0
+const FLICKER_MAX: float = 7.0
+const FLICKER_OFF: float = 0.5
 
 ## Plakaty: [pozycja środka, obrót Y (w stronę pokoju), roboczy tytuł]
 const POSTERS: Array = [
@@ -57,6 +65,8 @@ const POSTERS: Array = [
 
 var _geo: Node3D
 var _materials: Dictionary = {}
+## Świetlówki: [OmniLight3D, siatka oprawy] - do mrugania.
+var _lamps: Array = []
 var _rng := RandomNumberGenerator.new()
 
 
@@ -75,9 +85,12 @@ func _ready() -> void:
 	_build_garage()
 	_build_shop()
 	_build_toilet()
+	_build_decor()
 	_build_posters()
 	_build_items()
 	super()
+	if multiplayer.is_server():
+		_schedule_flicker()
 
 
 # --- Budynek --------------------------------------------------------------------------
@@ -134,7 +147,8 @@ func _build_lounge() -> void:
 
 	var box_top: float = 0.0
 	for x: float in [8.75, 9.52, 10.29]:
-		var box := _prop("cardboardBoxClosed", Vector3(x, 0.0, 0.0), _rng.randf_range(-0.08, 0.08), 0.75)
+		var box := _prop(BoxCatalog.path(["box_bedroom", "box_basement", "box_arrows"][int(x * 10) % 3]),
+				Vector3(x, 0.0, 0.0), _rng.randf_range(-0.08, 0.08), 0.75)
 		_back_to_wall(box, 0.0, 0.0)
 		box_top = _size(box).y
 	var tv := _prop("televisionModern", Vector3(9.52, box_top, 0.0), 0.0, 1.9)
@@ -215,6 +229,11 @@ func _build_office() -> void:
 	_prop("radio", Vector3(19.0, top, z - 0.1), -0.2, 0.4, false)
 	_prop("chairDesk", Vector3(16.45, 0.0, z + _size(desk_a).z * 0.5 + 0.35), PI + 0.15, 0.7)
 	_prop("pottedPlant", Vector3(19.55, 0.0, 2.6), 0.0, 0.6)
+	# Drobiazgi na biurkach.
+	_decor("mug", Vector3(17.25, top, z + 0.05), 0.4)
+	_decor("plant_succulent", Vector3(15.65, top, z - 0.15), 0.0)
+	_decor("photo_frame", Vector3(18.75, top, z - 0.2), -0.25)
+	_decor("plant_cactus", Vector3(19.35, top, z + 0.15), 0.0)
 
 	_marker("JobComputer", Vector3(16.45, 0.0, 2.3))
 	_sign("KOMPUTER\nwybór zleceń (wkrótce)", Vector3(16.5, 2.0, 1.4))
@@ -348,6 +367,57 @@ func _build_toilet() -> void:
 	_prop("trashcan", Vector3(3.55, 0.0, 2.6), 0.0, 0.3)
 
 
+## Dekoracje (scenes/props/decor): narzędzia na warsztacie, półki ścienne z drobiazgami,
+## rośliny, pachołki przy miejscu na busa, kula dyskotekowa nad kanapą.
+func _build_decor() -> void:
+	# Warsztat: narzędzia na blacie (y 0,96) i na dolnej półce (y 0,24).
+	_decor("tool_hammer", Vector3(10.25, 0.96, 8.05), 0.3)
+	_decor("tool_wrench", Vector3(10.3, 0.96, 8.5), -0.4)
+	_decor("tool_screwdriver", Vector3(10.15, 0.96, 8.85), 0.2)
+	_decor("tool_drill", Vector3(10.3, 0.96, 9.3), PI)
+	_decor("tool_tape_measure", Vector3(10.55, 0.96, 7.95), 0.5)
+	_decor("thermos", Vector3(10.62, 0.96, 9.0), 0.0)
+	_decor("hard_hat", Vector3(10.3, 0.96, 10.3), 0.6)
+	_decor("tool_saw", Vector3(10.25, 0.24, 9.9), PI / 2.0)
+	_decor("paint_can_red", Vector3(9.98, 0.24, 7.3), 0.0)
+	_decor("paint_can_blue", Vector3(10.45, 0.24, 7.35), 1.0)
+	_decor("paint_can_white", Vector3(10.2, 0.24, 8.3), 2.0)
+
+	# Półki ścienne: [drobiazg, przesunięcie wzdłuż półki]
+	_wall_shelf(Vector3(19.79, 1.57, 1.1), -PI / 2.0,                    # nad biurkiem
+			[["globe", -0.35], ["trophy", 0.0], ["alarm_clock", 0.35]])
+	_wall_shelf(Vector3(7.7, 1.37, 0.21), 0.0,                            # obok telewizora
+			[["rubik_cube", -0.35], ["snow_globe", 0.0], ["lava_lamp", 0.35]])
+	_wall_shelf(Vector3(0.21, 1.25, 2.4), PI / 2.0,                       # w WC
+			[["duck_rubber", -0.25], ["flowers_vase", 0.25]])
+	_wall_shelf(Vector3(11.27, 1.32, 7.7), PI / 2.0,                      # w sklepie
+			[["piggy_bank", -0.35], ["book_stack", 0.0], ["bowling_pin", 0.35]])
+
+	# Podłoga.
+	_decor("plant_monstera", Vector3(11.55, 0.0, 4.3), 0.0, true)        # przy kanapie
+	_decor("plant_fern", Vector3(12.85, 0.0, 6.2), 0.0, true)            # przy drzwiach do sklepu
+	_decor("plant_fern", Vector3(0.42, 0.0, 0.42), 1.0, true)            # w rogu WC
+	_decor("traffic_cone", Vector3(8.3, 0.0, 6.1), 0.3, true)            # przy miejscu na busa
+	_decor("traffic_cone", Vector3(8.3, 0.0, 9.9), -0.2, true)
+	_decor("pizza_boxes", Vector3(11.2, 0.0, 2.7), 0.4, true)            # obok kanapy
+	_decor("dumbbell", Vector3(7.95, 0.0, 4.45), 1.2, true)
+	_decor("garden_gnome", Vector3(4.55, 0.0, 0.4), 0.3, true)           # pilnuje drzwi do WC
+	_decor("disco_ball", Vector3(9.6, WALL_H - 1.14, 2.3), 0.0)          # nad dywanem, wisi z sufitu
+
+
+func _decor(decor_name: String, pos: Vector3, rot_y: float, collide: bool = false) -> Node3D:
+	return _prop(DecorCatalog.path(decor_name), pos, rot_y, 0.0, collide)
+
+
+## Półka ścienna (tył przy ścianie) z drobiazgami ustawionymi wzdłuż niej.
+func _wall_shelf(pos: Vector3, rot_y: float, items: Array) -> void:
+	_decor("wall_shelf", pos, rot_y, true)
+	var along := Vector3(cos(rot_y), 0.0, -sin(rot_y))
+	for entry: Array in items:
+		var at: Vector3 = pos + along * float(entry[1]) + Vector3(0, Decor.SHELF_TOP, 0)
+		_decor(entry[0], at, rot_y + _rng.randf_range(-0.3, 0.3))
+
+
 ## Plakaty: obrazek z assets/posters, a bez niego kolorowa zaślepka z tytułem.
 func _build_posters() -> void:
 	for i in POSTERS.size():
@@ -369,21 +439,40 @@ func _build_posters() -> void:
 		_geo.add_child(logo_sign)
 
 
-## Kilka kartonów do rzucania w kumpli między zleceniami.
+## Kartony do noszenia (i rzucania w kumpli) między zleceniami.
+## Nie są ze zleceń, więc nie mają wartości: nie liczą się do szkód i się nie niszczą.
+## [wariant, nazwa w grze, masa, środek na podłodze]
+const HQ_ITEMS: Array = [
+	["box_kitchen", "Karton (kuchnia)", 6.0, Vector3(1.0, 0.0, 5.15)],
+	["box_kuba", "Rzeczy Kuby", 5.0, Vector3(1.75, 0.0, 5.15)],
+	["box_mystery", "Tajemniczy karton", 7.0, Vector3(2.5, 0.0, 5.15)],
+	["box_fragile", "Karton ze szkłem", 5.0, Vector3(3.4, 0.0, 5.15)],
+	["box_books", "Książki", 14.0, Vector3(8.0, 0.0, 4.95)],
+	["box_wardrobe", "Karton na szafę", 9.0, Vector3(15.0, 0.0, 4.6)],
+	["box_painting", "Obraz w kartonie", 6.0, Vector3(16.3, 0.0, 4.6)],
+	["box_tv", "Telewizor w kartonie", 16.0, Vector3(17.6, 0.0, 4.6)],
+]
+
+
 func _build_items() -> void:
 	var items := Node3D.new()
 	items.name = "Items"
 	add_child(items)
-	var spots: Array[Vector3] = [Vector3(1.0, 0.45, 5.15), Vector3(1.75, 0.45, 5.15),
-			Vector3(2.5, 0.45, 5.15), Vector3(8.0, 0.45, 4.95)]
-	for i in spots.size():
+	for i in HQ_ITEMS.size():
+		var entry: Array = HQ_ITEMS[i]
+		var scene: PackedScene = BoxCatalog.scene(entry[0])
 		var item := ITEM_SCENE.instantiate() as Grabbable
 		item.name = "Karton%d" % (i + 1)
-		item.item_name = "Karton"
-		item.model = load(FURNITURE % "cardboardBoxClosed") as PackedScene
-		item.mass = 4.0
-		item.value = 20.0
-		item.position = spots[i]
+		item.item_name = entry[1]
+		item.model = scene
+		item.model_scale = 1.0  # kartony proceduralne mają już prawdziwe wymiary
+		item.mass = entry[2]
+		item.value = 0.0
+		# Grabbable centruje model na środku ciała, więc stawiamy go na połowie wysokości.
+		var probe := scene.instantiate() as CardboardBox
+		var height: float = probe.size.y
+		probe.free()
+		item.position = (entry[3] as Vector3) + Vector3(0, height * 0.5 + 0.02, 0)
 		items.add_child(item)
 
 
@@ -477,16 +566,22 @@ func _rack(x0: float, x1: float, z0: float, z1: float, height: float = 2.2, leve
 				var w: float = _rng.randf_range(0.38, 0.55)
 				if cursor + w > length - 0.05:
 					break
-				if _rng.randf() < RACK_FILL:
+				var roll: float = _rng.randf()
+				if roll < RACK_FILL + RACK_DECOR:
 					var along: float = cursor + w * 0.5
 					var pos: Vector3
 					if long_x:
 						pos = Vector3(x0 + along, y, lerpf(z0, z1, across))
 					else:
 						pos = Vector3(lerpf(x0, x1, across), y, z0 + along)
-					var model: String = "cardboardBoxOpen" if _rng.randf() < 0.2 else "cardboardBoxClosed"
-					var rot: float = (0.0 if long_x else PI / 2.0) + _rng.randf_range(-0.12, 0.12)
-					_prop(model, pos, rot, w * 0.92, false)
+					if roll < RACK_FILL:  # karton
+						var model: String = BoxCatalog.path(BoxCatalog.SHELF[_rng.randi() % BoxCatalog.SHELF.size()])
+						var rot: float = (0.0 if long_x else PI / 2.0) + _rng.randf_range(-0.12, 0.12) \
+								+ (PI if _rng.randf() < 0.5 else 0.0)  # napisy raz z jednej, raz z drugiej strony
+						_prop(model, pos, rot, w * 0.92, false)
+					else:  # drobiazg (kaczka, globus, puszka farby...) w prawdziwej skali
+						var trinket: String = DecorCatalog.SHELF_TRINKETS[_rng.randi() % DecorCatalog.SHELF_TRINKETS.size()]
+						_prop(DecorCatalog.path(trinket), pos, _rng.randf_range(0.0, TAU), 0.0, false)
 				cursor += w + 0.06
 
 
@@ -543,14 +638,49 @@ func _door(door_name: String, hinge: Vector3, base_rot_y: float, width: float) -
 
 
 func _ceiling_light(at: Vector3, light_range: float, energy: float, shadows: bool) -> void:
-	_box(Vector3(at.x, WALL_H - 0.03, at.z), Vector3(1.3, 0.05, 0.18), Color(1, 1, 1), 0.0, false, "", 1.0, true)
+	var fixture: Node3D = _box(Vector3(at.x, WALL_H - 0.03, at.z), Vector3(1.3, 0.05, 0.18), Color(1, 1, 1),
+			0.0, false, "", 1.0, true)
 	var light := OmniLight3D.new()
 	light.position = Vector3(at.x, WALL_H - 0.35, at.z)
 	light.omni_range = light_range
 	light.light_energy = energy
-	light.light_color = Color(1.0, 0.96, 0.88)
+	light.light_color = LAMP_COLOR
 	light.shadow_enabled = shadows
 	_geo.add_child(light)
+	_lamps.append([light, fixture])
+
+
+# --- Mruganie świetlówek --------------------------------------------------------------
+# Host co losowe 3-7 s gasi jedną losową lampę na 0,5 s i rozsyła to graczom,
+# więc wszyscy widzą to samo.
+
+func _schedule_flicker() -> void:
+	get_tree().create_timer(randf_range(FLICKER_MIN, FLICKER_MAX)).timeout.connect(_flicker_random)
+
+
+func _flicker_random() -> void:
+	if _lamps.is_empty():
+		return
+	var index: int = randi() % _lamps.size()
+	_rpc_flicker(index)
+	for id in Net.ready_peers:
+		if id != multiplayer.get_unique_id():
+			_rpc_flicker.rpc_id(id, index)
+	_schedule_flicker()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_flicker(index: int) -> void:
+	if index < 0 or index >= _lamps.size():
+		return
+	var light: OmniLight3D = _lamps[index][0]
+	var fixture: MeshInstance3D = _lamps[index][1]
+	var on_material: Material = fixture.material_override
+	light.visible = false
+	fixture.material_override = _material(Color(0.55, 0.53, 0.5))  # zgaszona świetlówka
+	get_tree().create_timer(FLICKER_OFF).timeout.connect(func() -> void:
+		light.visible = true
+		fixture.material_override = on_material)
 
 
 func _sign(text: String, pos: Vector3) -> void:
@@ -580,7 +710,8 @@ func _marker(marker_name: String, pos: Vector3) -> void:
 ## Zwraca uchwyt (StaticBody3D z kolizją-pudełkiem albo Node3D bez kolizji), meta "size".
 func _prop(model_name: String, pos: Vector3, rot_y: float = 0.0, fit_width: float = 0.0,
 		collide: bool = true) -> Node3D:
-	var path: String = FURNITURE % model_name
+	# Nazwa z Kenney Furniture Kit albo pełna ścieżka do sceny (np. karton z BoxCatalog).
+	var path: String = model_name if model_name.begins_with("res://") else FURNITURE % model_name
 	if not ResourceLoader.exists(path):
 		push_warning("Brak modelu: %s" % path)
 		return null
@@ -594,7 +725,7 @@ func _prop(model_name: String, pos: Vector3, rot_y: float = 0.0, fit_width: floa
 	_geo.add_child(holder)
 
 	var visual: Node3D = (load(path) as PackedScene).instantiate()
-	visual.scale = Vector3.ONE * 2.0
+	visual.scale = Vector3.ONE * (1.0 if model_name.begins_with("res://") else 2.0)  # Kenney ~1:2
 	holder.add_child(visual)
 	var box: AABB = _mesh_aabb(visual, holder)
 	if fit_width > 0.0 and box.size.x > 0.01:
@@ -637,7 +768,8 @@ func _mesh_aabb(root: Node3D, relative_to: Node) -> AABB:
 	var stack: Array[Node] = [root]
 	while not stack.is_empty():
 		var node: Node = stack.pop_back()
-		if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		# skip_bounds: elementy, które nie powinny powiększać hitboxa (np. odchylone klapy kartonu).
+		if node is MeshInstance3D and (node as MeshInstance3D).mesh != null and not node.has_meta("skip_bounds"):
 			var mi := node as MeshInstance3D
 			var box: AABB = _transform_between(mi, relative_to) * mi.get_aabb()
 			result = box if first else result.merge(box)
@@ -673,7 +805,7 @@ func _material(color: Color, texture_base: String = "", uv_scale: float = 1.0, e
 			mat.uv1_scale = Vector3.ONE * uv_scale
 	if emissive:
 		mat.emission_enabled = true
-		mat.emission = Color(1.0, 0.97, 0.9)
+		mat.emission = LAMP_COLOR
 		mat.emission_energy_multiplier = 2.5
 	_materials[key] = mat
 	return mat

@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_painting" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(1.0, 0.74, 0.12)
+marker_text = "OBRAZ\nNIE ZGINAĆ!"
+handles = false
+tape = 2
+variant_seed = 4

@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_small" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(0.26, 0.18, 0.24)
+marker_text = "DROBIAZGI"
+handles = false
+variant_seed = 9

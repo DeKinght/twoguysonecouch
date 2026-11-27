@@ -161,16 +161,21 @@ func _refresh_prompt() -> void:
 	var text: String = ""
 	if grabber.held != null and is_instance_valid(grabber.held):
 		var h: Grabbable = grabber.held
-		text = "Trzymasz: %s   •   %.0f kg   •   %.0f zł        kółko myszy: odległość" \
-				% [h.item_name, h.mass, h.value]
+		text = "Trzymasz: %s   •   %.0f kg%s        kółko myszy: odległość" \
+				% [h.item_name, h.mass, _price(h)]
 	elif is_instance_valid(grabber.looked_at):  # przedmiot mógł właśnie zostać zniszczony
 		var l: Grabbable = grabber.looked_at
-		text = "[%s]  %s   •   %.0f kg   •   %.0f zł" \
-				% [Settings.event_text("grab"), l.item_name, l.mass, l.value]
+		text = "[%s]  %s   •   %.0f kg%s" \
+				% [Settings.event_text("grab"), l.item_name, l.mass, _price(l)]
 	elif _usable() != null:
 		text = "[%s]  %s" % [Settings.event_text("interact"), _usable().interact_text()]
 	_prompt.text = text
 	_prompt_panel.visible = text != ""
+
+
+## Cena w podpowiedzi - tylko dla przedmiotów ze zleceń (w siedzibie nic nie jest warte).
+func _price(item: Grabbable) -> String:
+	return "   •   %.0f zł" % item.value if item.has_value() else ""
 
 
 ## To, na co patrzy gracz i czego może użyć klawiszem E (drzwi, brama...), albo null.

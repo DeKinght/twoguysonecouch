@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_tv" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(1.25, 0.8, 0.18)
+print_text = "TV 55\"\nNIE KŁAŚĆ PŁASKO"
+this_side_up = true
+fragile = true
+handles = false
+tint = Color(0.62, 0.48, 0.32, 1)
+variant_seed = 10

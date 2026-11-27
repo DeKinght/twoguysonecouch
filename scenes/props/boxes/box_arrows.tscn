@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_arrows" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(0.55, 0.48, 0.44)
+this_side_up = true
+shipping_label = true
+print_text = ""
+variant_seed = 8

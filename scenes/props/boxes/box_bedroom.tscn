@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/props/cardboard_box.gd" id="1_box"]
+
+[node name="box_bedroom" type="Node3D"]
+script = ExtResource("1_box")
+size = Vector3(0.66, 0.52, 0.52)
+marker_text = "SYPIALNIA"
+tape = 1
+this_side_up = true
+variant_seed = 3
