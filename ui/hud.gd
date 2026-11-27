@@ -151,7 +151,7 @@ func _refresh_help() -> void:
 
 
 func _refresh_crosshair() -> void:
-	var active: bool = grabber.looked_at != null or grabber.held != null
+	var active: bool = is_instance_valid(grabber.looked_at) or is_instance_valid(grabber.held)
 	_crosshair_style.bg_color = UITheme.PRIMARY if active else UITheme.TEXT
 	_set_dot_size(DOT_BIG if active else DOT_SMALL)
 
@@ -162,7 +162,7 @@ func _refresh_prompt() -> void:
 		var h: Grabbable = grabber.held
 		text = "Trzymasz: %s   •   %.0f kg   •   %.0f zł        kółko myszy: odległość" \
 				% [h.item_name, h.mass, h.value]
-	elif grabber.looked_at != null:
+	elif is_instance_valid(grabber.looked_at):  # przedmiot mógł właśnie zostać zniszczony
 		var l: Grabbable = grabber.looked_at
 		text = "[%s]  %s   •   %.0f kg   •   %.0f zł" \
 				% [Settings.event_text("grab"), l.item_name, l.mass, l.value]

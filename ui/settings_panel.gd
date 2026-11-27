@@ -5,6 +5,8 @@ extends VBoxContainer
 
 var _sens_slider: HSlider
 var _sens_value: Label
+var _volume_slider: HSlider
+var _volume_value: Label
 var _bind_buttons: Dictionary = {}  ## akcja -> Button
 var _listening: String = ""
 
@@ -31,6 +33,27 @@ static func wrap_in_scroll(min_height: float = 0.0) -> ScrollContainer:
 func _ready() -> void:
 	add_theme_constant_override("separation", 12)
 	custom_minimum_size = Vector2(560, 0)
+
+	# --- Dźwięk ---
+	var volume_row := HBoxContainer.new()
+	add_child(volume_row)
+	var volume_label := Label.new()
+	volume_label.text = "Głośność"
+	volume_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	volume_row.add_child(volume_label)
+	_volume_value = Label.new()
+	_volume_value.theme_type_variation = "HeadingLabel"
+	volume_row.add_child(_volume_value)
+
+	_volume_slider = HSlider.new()
+	_volume_slider.min_value = 0.0
+	_volume_slider.max_value = 1.0
+	_volume_slider.step = 0.01
+	_volume_slider.value = Settings.master_volume
+	_volume_slider.custom_minimum_size = Vector2(0, 28)
+	_volume_slider.scrollable = false
+	_volume_slider.value_changed.connect(func(v: float) -> void: Settings.set_master_volume(v))
+	add_child(_volume_slider)
 
 	# --- Mysz ---
 	var sens_row := HBoxContainer.new()
@@ -93,7 +116,8 @@ func _ready() -> void:
 	reset.theme_type_variation = "SmallButton"
 	reset.pressed.connect(func() -> void:
 		Settings.reset_defaults()
-		_sens_slider.set_value_no_signal(Settings.sensitivity_mult))
+		_sens_slider.set_value_no_signal(Settings.sensitivity_mult)
+		_volume_slider.set_value_no_signal(Settings.master_volume))
 	add_child(reset)
 
 	Settings.changed.connect(_refresh)
@@ -147,6 +171,8 @@ func _on_sensitivity_changed(value: float) -> void:
 
 func _refresh() -> void:
 	_sens_value.text = "%.2f×" % Settings.sensitivity_mult
+	_volume_value.text = "Wyciszone" if Settings.master_volume <= 0.001 \
+			else "%d%%" % roundi(Settings.master_volume * 100.0)
 	for action: String in _bind_buttons:
 		if action != _listening:
 			(_bind_buttons[action] as Button).text = Settings.event_text(action)

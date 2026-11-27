@@ -62,6 +62,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _count_loaded() -> void:
+	# Zniszczone przedmioty znikają z grupy, więc zlecenie da się skończyć bez nich.
+	total_count = get_tree().get_nodes_in_group("grabbables").size()
 	_loaded_items.clear()
 	if zone != null:
 		for body in zone.get_overlapping_bodies():

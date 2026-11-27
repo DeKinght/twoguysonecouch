@@ -70,6 +70,7 @@ var _overlay: StandardMaterial3D
 var _prev_velocity: Vector3 = Vector3.ZERO
 var _last_hit_time: float = -10.0
 var _last_release_time: float = -10.0
+var _destroyed: bool = false
 
 
 func _ready() -> void:
@@ -173,6 +174,8 @@ func rpc_push(impulse: Vector3) -> void:
 # --- Logika hosta: chwyt ------------------------------------------------------------
 
 func _server_begin_hold(peer_id: int, local_point: Vector3, target: Vector3) -> void:
+	if _destroyed:
+		return
 	holders[peer_id] = {
 		"point": local_point,
 		"target": target,
@@ -240,7 +243,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 
 func _apply_damage(excess_speed: float, now: float) -> void:
-	if value <= 0.0 or now - _last_hit_time < HIT_COOLDOWN:
+	if _destroyed or value <= 0.0 or now - _last_hit_time < HIT_COOLDOWN:
 		return
 	_last_hit_time = now
 	var loss: float = excess_speed * damage_scale * (100.0 / maxf(durability, 1.0))
@@ -249,6 +252,46 @@ func _apply_damage(excess_speed: float, now: float) -> void:
 		return
 	value -= loss_int
 	Ledger.record(_blame_id(now), item_name, loss_int)
+	if value <= 0.0:
+		# Poza callbackiem fizyki - tam nie wolno zmieniać kolizji ani usuwać ciała.
+		_server_destroy.call_deferred()
+
+
+## Host: przedmiot stracił całą wartość - znika u wszystkich (z efektem i dźwiękiem).
+func _server_destroy() -> void:
+	if _destroyed:
+		return
+	if multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
+		_rpc_destroy()
+	else:
+		_rpc_destroy.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_destroy() -> void:
+	if _destroyed:
+		return
+	_destroyed = true
+	DestroyEffect.spawn(get_tree().current_scene, global_position, color, size)
+	if not multiplayer.is_server():
+		queue_free()
+		return
+	# Host: od razu chowamy i wyłączamy ciało, ale usuwamy je chwilę później,
+	# żeby polecenie zniszczenia zdążyło dojść do klientów przed zniknięciem węzła.
+	holders.clear()
+	holder_count = 0
+	visible = false
+	freeze = true
+	collision_layer = 0
+	collision_mask = 0
+	remove_from_group("grabbables")
+	_stop_syncing.call_deferred()  # po wysłaniu RPC (niewidoczny węzeł blokuje też RPC)
+	get_tree().create_timer(0.5).timeout.connect(queue_free)
+
+
+func _stop_syncing() -> void:
+	for peer_id: int in multiplayer.get_peers():
+		net_sync.set_visibility_for(peer_id, false)
 
 
 func _blame_id(now: float) -> int:

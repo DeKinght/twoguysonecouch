@@ -31,6 +31,8 @@ const KEY_NAMES: Dictionary = {
 
 ## Mnożnik czułości myszy (1.0 = domyślna).
 var sensitivity_mult: float = 1.0
+## Głośność całej gry (0.0 - 1.0), szyna audio "Master".
+var master_volume: float = 1.0
 ## Otwarte menu pauzy - gracz nie steruje postacią.
 var menu_open: bool = false
 
@@ -43,11 +45,25 @@ func _ready() -> void:
 		var action: String = entry[0]
 		_defaults[action] = InputMap.action_get_events(action).duplicate()
 	_load()
+	_apply_volume()
 
 
 ## Czy sterowanie postacią jest zablokowane (menu pauzy albo ekran podsumowania).
 func input_blocked() -> bool:
 	return menu_open or Net.input_locked
+
+
+func set_master_volume(value: float) -> void:
+	master_volume = clampf(value, 0.0, 1.0)
+	_apply_volume()
+	_save()
+	changed.emit()
+
+
+func _apply_volume() -> void:
+	var bus: int = AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_mute(bus, master_volume <= 0.001)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.001)))
 
 
 func set_sensitivity(value: float) -> void:
@@ -77,6 +93,8 @@ func reset_defaults() -> void:
 		for ev: InputEvent in _defaults[action]:
 			InputMap.action_add_event(action, ev)
 	sensitivity_mult = 1.0
+	master_volume = 1.0
+	_apply_volume()
 	_save()
 	changed.emit()
 
@@ -128,6 +146,7 @@ func _clean(ev: InputEvent) -> InputEvent:
 func _save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("mouse", "sensitivity", sensitivity_mult)
+	cfg.set_value("audio", "master_volume", master_volume)
 	for entry: Array in ACTIONS:
 		var action: String = entry[0]
 		var parts: PackedStringArray = []
@@ -144,6 +163,7 @@ func _load() -> void:
 	if cfg.load(PATH) != OK:
 		return
 	sensitivity_mult = clampf(float(cfg.get_value("mouse", "sensitivity", 1.0)), 0.1, 3.0)
+	master_volume = clampf(float(cfg.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
 	for entry: Array in ACTIONS:
 		var action: String = entry[0]
 		if not cfg.has_section_key("input", action):

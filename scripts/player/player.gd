@@ -10,6 +10,8 @@ extends CharacterBody3D
 ## sterować, kamera opada i przechyla się, a cudza kapsuła leży na boku.
 ## Przewrócić może uderzenie ciężkiego przedmiotu, upadek z wysoka albo popchnięcie (B).
 
+const STEP_SOUND: String = "res://assets/audio/footsteps/footstep.mp3"
+
 @export_group("Ruch")
 @export var walk_speed: float = 4.5
 @export var sprint_speed: float = 7.0
@@ -41,6 +43,21 @@ extends CharacterBody3D
 @export var shove_cooldown: float = 1.0
 @export var shove_impulse: float = 5.0
 
+@export_group("Dźwięk kroków")
+## Odstęp między krokami [s]: sprint szybciej, kucanie wolniej.
+@export var step_interval_walk: float = 0.45
+@export var step_interval_sprint: float = 0.3
+@export var step_interval_crouch: float = 0.62
+## Szybkość odtwarzania dźwięku kroku (1.0 = oryginał; wyżej = szybciej i wyżej).
+@export var step_pitch_walk: float = 1.0
+@export var step_pitch_sprint: float = 1.2
+@export var step_pitch_crouch: float = 0.82
+@export var step_volume_db: float = -4.0
+## Ciszej przy kucaniu.
+@export var crouch_step_volume_db: float = -12.0
+## Lądowanie po skoku/upadku jest głośniejsze o tyle dB.
+@export var landing_volume_boost_db: float = 5.0
+
 @export_group("Sieć")
 @export var remote_smoothing: float = 20.0
 
@@ -50,6 +67,7 @@ var net_yaw: float = 0.0
 var net_pitch: float = 0.0
 var net_height: float = 1.8
 var net_down: bool = false
+var net_on_floor: bool = true
 
 var is_local: bool = true
 
@@ -63,6 +81,14 @@ var _down_blend: float = 0.0
 var _shove_cd: float = 0.0
 ## Tylko host (kopia cudzej postaci): kiedy ostatnio zlecono przewrócenie.
 var _last_knock_request: float = -100.0
+
+# Kroki (liczone lokalnie u każdego - także dla cudzych postaci, z ich ruchu).
+var _step_player: AudioStreamPlayer3D
+var _step_timer: float = 0.0
+var _last_step_pos: Vector3
+var _ground_speed: float = 0.0  ## wygładzona prędkość pozioma (też dla cudzych postaci)
+var _sfx_on_floor: bool = true
+var _air_time: float = 0.0
 
 # Wejście z bieżącej klatki (patrz _read_input).
 var _move_input: Vector2 = Vector2.ZERO
@@ -84,6 +110,7 @@ func _ready() -> void:
 	net_yaw = rotation.y
 	net_height = stand_height
 	_setup_sync()
+	_setup_footsteps()
 
 	if is_local:
 		camera.make_current()
@@ -166,6 +193,8 @@ func _physics_process(delta: float) -> void:
 	net_pitch = _pitch
 	net_height = _capsule.height
 	net_down = _down_timer > 0.0
+	net_on_floor = is_on_floor()
+	_update_footsteps(delta, net_on_floor)
 
 
 func _read_input() -> void:
@@ -300,6 +329,77 @@ func _server_shove(sender_id: int, target_id: int) -> void:
 
 # --- Sieć -----------------------------------------------------------------------
 
+func _setup_footsteps() -> void:
+	if not ResourceLoader.exists(STEP_SOUND):
+		return
+	# Randomizer z jednym dźwiękiem: każdy krok brzmi minimalnie inaczej.
+	var variants := AudioStreamRandomizer.new()
+	variants.add_stream(-1, load(STEP_SOUND) as AudioStream)
+	variants.random_pitch = 1.06           # ±6% wysokości przy każdym kroku
+	variants.random_volume_offset_db = 1.5
+	_step_player = AudioStreamPlayer3D.new()
+	_step_player.stream = variants
+	_step_player.position = Vector3(0, 0.05, 0)  # przy stopach
+	_step_player.unit_size = 4.0
+	_step_player.max_distance = 25.0
+	_step_player.max_polyphony = 3  # kroki mogą na siebie lekko nachodzić
+	add_child(_step_player)
+	_last_step_pos = global_position
+
+
+## Kroki w rytmie zależnym od chodu (chód / sprint / kucanie) + głośniejsze lądowanie.
+## Działa dla własnej postaci i dla cudzych - chód rozpoznajemy z prędkości ruchu,
+## więc nie trzeba przesyłać przez sieć, czy ktoś sprintuje.
+func _update_footsteps(delta: float, on_floor: bool) -> void:
+	if _step_player == null or delta <= 0.0:
+		return
+	var moved: Vector3 = global_position - _last_step_pos
+	moved.y = 0.0
+	_last_step_pos = global_position
+	var speed: float = moved.length() / delta
+	if speed > 30.0:
+		speed = 0.0  # teleport/spawn, nie ruch
+	_ground_speed = lerpf(_ground_speed, speed, 0.2)
+
+	var lying: bool = is_down()
+	if not on_floor:
+		_air_time += delta
+	elif not _sfx_on_floor and _air_time > 0.25 and not lying:
+		_play_step(_gait(), landing_volume_boost_db)  # lądowanie
+		_step_timer = 0.0
+	if on_floor:
+		_air_time = 0.0
+	_sfx_on_floor = on_floor
+
+	if not on_floor or lying or _ground_speed < 0.6:
+		_step_timer = 999.0  # po ruszeniu z miejsca pierwszy krok od razu
+		return
+	var gait: int = _gait()
+	var interval: float = [step_interval_walk, step_interval_sprint, step_interval_crouch][gait]
+	# Powoli (np. z lodówką w rękach) - kroki rzadsze.
+	if gait == 0:
+		interval *= clampf(walk_speed * 0.7 / _ground_speed, 1.0, 1.8)
+	_step_timer += delta
+	if _step_timer >= interval:
+		_step_timer = 0.0
+		_play_step(gait, 0.0)
+
+
+## 0 = chód, 1 = sprint, 2 = kucanie.
+func _gait() -> int:
+	if _capsule.height < stand_height - 0.2:
+		return 2
+	if _ground_speed > (walk_speed + sprint_speed) * 0.5:
+		return 1
+	return 0
+
+
+func _play_step(gait: int, extra_db: float) -> void:
+	_step_player.pitch_scale = [step_pitch_walk, step_pitch_sprint, step_pitch_crouch][gait]
+	_step_player.volume_db = (crouch_step_volume_db if gait == 2 else step_volume_db) + extra_db
+	_step_player.play()
+
+
 func _remote_update(delta: float) -> void:
 	var t: float = 1.0 - exp(-remote_smoothing * delta)
 	global_position = global_position.lerp(net_position, t)
@@ -307,11 +407,12 @@ func _remote_update(delta: float) -> void:
 	head.rotation.x = lerpf(head.rotation.x, net_pitch, t)
 	_down_blend = move_toward(_down_blend, 1.0 if net_down else 0.0, 3.0 * delta)
 	_apply_height(lerpf(_capsule.height, net_height, t))
+	_update_footsteps(delta, net_on_floor)
 
 
 func _setup_sync() -> void:
 	var cfg := SceneReplicationConfig.new()
-	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down"]:
+	for prop: String in [":net_position", ":net_yaw", ":net_pitch", ":net_height", ":net_down", ":net_on_floor"]:
 		var path := NodePath(prop)
 		cfg.add_property(path)
 		cfg.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
