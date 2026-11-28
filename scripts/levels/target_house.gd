@@ -39,6 +39,9 @@ func build() -> void:
 	_build_collision()
 	_build_doors()
 	_build_furniture()
+	for light in find_children("*", "OmniLight3D", true, false):
+		RenderTuning.tune_lamp(light)
+	RenderTuning.mark_interior(self, AABB(Vector3(-X_WALL + 0.1, -0.2, Z_FRONT + 0.1), Vector3(X_WALL * 2.0 - 0.2, CEILING + 0.1, Z_BACK - Z_FRONT - 0.2)))
 
 
 # --- Bryła domu --------------------------------------------------------------------------

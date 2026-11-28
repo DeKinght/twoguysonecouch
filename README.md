@@ -89,3 +89,20 @@ i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów 
   przezroczystymi szybami i wnętrzem: salon z aneksem kuchennym, sypialnia za ścianką działową, drzwi wejściowe
   i do sypialni otwierane na E, lampy, 17 mebli do zabrania. Dom losuje się na przedmieściu.
 
+
+## Wydajność
+- Ustawienia → **Limit klatek** (30/60/90/120/144/bez limitu, domyślnie 60). **F3** w grze: licznik FPS,
+  liczba rysowanych obiektów, wywołań rysowania i trójkątów.
+- Miasto rysowane w kwadratach 72 x 72 m (panorama 150 x 150 m), więc kwadraty poza kadrem i poza warstwami
+  cienia są pomijane, a dalekie kwadraty używają automatycznych LOD-ów z importu. Drobiazgi (ławki, hydranty,
+  auta, kontenery, latarnie...) płynnie znikają za 90-190 m (dithering, już we mgle); budynki nigdy.
+  Meble do noszenia nie są tym objęte.
+- `scripts/core/render_tuning.gd`: słońce z 2 warstwami cienia do 80 m i bez drobiazgów z wnętrz budynków
+  (warstwa renderowania 2 - dach i tak je zasłania); lampy wygaszają się z odległości (cienie lamp bez zmian).
+- Różnorodność zabudowy: budynek nie powtarza modelu dwóch ostatnich sąsiadów z tej samej pierzei, dostaje losową
+  paletę kolorów (variation-a/b/c z paczek Kenney), skalę, cofnięcie od ulicy, przesunięcie w bok i lekki obrót
+  (najmniej w śródmieściu, najwięcej na przedmieściu). Część działek zostaje pusta (ogród / parking / plac),
+  przed cofniętymi domami czasem rośnie żywopłot.
+- Kamera zza auta (V) nie wchodzi w budynki: kula sprawdza drogę od auta do kamery, a kamera staje tuż przed
+  przeszkodą (przybliża się od razu, oddala płynnie).
+

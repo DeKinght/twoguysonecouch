@@ -12,3 +12,5 @@
 | City Kit Suburban 2.0 | Kenney (www.kenney.nl) | CC0 1.0 | `assets/models/suburban/` |
 | City Kit Commercial 2.1 | Kenney (www.kenney.nl) | CC0 1.0 | `assets/models/commercial/` |
 | City Kit Industrial 2.0 | Kenney (www.kenney.nl) | CC0 1.0 | `assets/models/industrial/` |
+
+Palety `assets/models/{suburban,commercial,industrial}/Variations/` pochodzą z tych samych paczek Kenney (CC0).
