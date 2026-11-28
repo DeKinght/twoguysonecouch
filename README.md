@@ -110,3 +110,16 @@ i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów 
   murem prawdziwe budynki tej dzielnicy, dalej bryły o wysokościach jak w mieście (przedmieście 6-10 m,
   przemysł 8-16 m, śródmieście 14-34 m), na przedmieściach więcej drzew.
 
+### Krawędź miasta (`scripts/levels/city_edge.gd`)
+Każdy odcinek obwodu zależy od dzielnicy, która do niego dochodzi (odcinki min. 4 moduły):
+- przemysł -> **port**: nabrzeże z pachołkami i żółtą krawędzią, kontenery, suwnice nad wodą, statek z kontenerami
+  przy dłuższych odcinkach, woda (shader `shaders/water.gdshader`), daleki brzeg ze wzgórzami;
+- śródmieście -> **obwodnica**: estakada z ekranami akustycznymi, barierami i filarami, ruch aut
+  (`highway_traffic.gd`), pod nią parkingi, zieleń i billboardy; na końcach odcinka skręca od miasta
+  i znika w tunelu we wzgórzu (albo we mgle);
+- przedmieście -> **wzgórza**: ogródki działkowe (altanki, grządki, płotki), łąki, potem zalesione wzgórza.
+Część wylotów ulic jest zamknięta (zapora, pachołki, tablica) i prowadzi dalej jako droga leśna / asfalt pod
+estakadą / brama portu. Teren to jedna siatka z kolorami wierzchołków (dolina zamknięta pasmem gór),
+las daleko to MultiMesh prostych drzewek bez cieni. Statyczne bryły (krawędź, płoty, place) trafiają do
+zbiorczych siatek - jedna na kwadrat 72 m (`WorldGenerator._merge_box`).
+
