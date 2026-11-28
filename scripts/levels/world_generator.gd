@@ -626,8 +626,17 @@ func _suburban_garden(center: Vector3, d: int, lot: Vector2, setback: float) -> 
 	var to_road := Vector3(dir.x, 0, dir.y)
 	var along := Vector3(-to_road.z, 0, to_road.x)
 	var rot: float = atan2(-float(dir.x), -float(dir.y))
+	var tree_side: float = 1.0 if _rng.randf() < 0.5 else -1.0
+	if setback >= 5.4 and _rng.randf() < 0.35:
+		# Podjazd przed domem z autem (po przeciwnej stronie niż drzewko).
+		var drive: Vector3 = center + to_road * (lot.y * 0.5 - setback * 0.5) - along * tree_side * lot.x * 0.28
+		_flat_box(drive, Vector2(3.0, setback) if d in [N, S] else Vector2(setback, 3.0), Color(0.6, 0.59, 0.56), 0.014)
+		var heading: float = atan2(to_road.x, to_road.z) + (PI if _rng.randf() < 0.5 else 0.0)
+		var car_pos: Vector3 = drive + Vector3(0, 0.29, 0)
+		_add(CITY % CARS[_rng.randi_range(0, CARS.size() - 1)], Transform3D(Basis(Vector3.UP, heading).scaled(Vector3.ONE * S_CITY), car_pos))
+		_box_collider(car_pos + Vector3(0, 0.6, 0), Vector3(1.9, 1.5, 4.2), heading)
 	if _rng.randf() < 0.7:
-		var p: Vector3 = center + along * (lot.x * 0.5 - 0.8) * (1 if _rng.randf() < 0.5 else -1) + to_road * (lot.y * 0.5 - 0.7)
+		var p: Vector3 = center + along * (lot.x * 0.5 - 0.8) * tree_side + to_road * (lot.y * 0.5 - 0.7)
 		_add(SUB % ("tree-large" if _rng.randf() < 0.5 else "tree-small"), Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 8.0), p))
 		_box_collider(p + Vector3(0, 1.5, 0), Vector3(0.5, 3.0, 0.5), 0.0)
 	if _rng.randf() < 0.5:
@@ -670,7 +679,20 @@ func _place_yard(m: Vector2i, district: int) -> void:
 				_add(IND % "solar-panel-landscape-group", Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(Vector3.ONE * 5.0), c))
 		COMMERCIAL:
 			_flat_box(c, Vector2(M, M), PAVING[COMMERCIAL], 0.012)
-			if _rng.randf() < 0.5:  # ogródek kawiarni
+			var roll: float = _rng.randf()
+			if roll < 0.3:  # parking: rząd miejsc z kilkoma autami
+				var along_x: bool = _rng.randf() < 0.5
+				var lane := Vector3(1, 0, 0) if along_x else Vector3(0, 0, 1)
+				var nose := Vector3(0, 0, 1) if along_x else Vector3(1, 0, 0)
+				for k in 4:
+					var spot: Vector3 = c + lane * (-3.45 + k * 2.3)
+					_visual_box(spot + lane * 1.15 + Vector3(0, 0.013, 0), Vector3(0.12, 0.02, 4.6) if along_x else Vector3(4.6, 0.02, 0.12), 0.0, Color(0.92, 0.92, 0.9))
+					if _rng.randf() < 0.7:
+						var heading: float = atan2(nose.x, nose.z) + (PI if _rng.randf() < 0.5 else 0.0)
+						var cp: Vector3 = spot + Vector3(0, 0.29, 0)
+						_add(CITY % CARS[_rng.randi_range(0, CARS.size() - 1)], Transform3D(Basis(Vector3.UP, heading).scaled(Vector3.ONE * S_CITY), cp))
+						_box_collider(cp + Vector3(0, 0.6, 0), Vector3(1.9, 1.5, 4.2), heading)
+			elif roll < 0.6:  # ogródek kawiarni
 				for k in _rng.randi_range(2, 3):
 					var p: Vector3 = c + Vector3(_rng.randf_range(-3, 3), 0, _rng.randf_range(-3, 3))
 					_add(COM % ("detail-parasol-" + ["a", "b"][_rng.randi_range(0, 1)]), Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 6.0), p))
@@ -701,13 +723,12 @@ func _place_park(m: Vector2i) -> void:
 			_add(NATURE % BUSHES[_rng.randi_range(0, BUSHES.size() - 1)],
 					Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 2.0), p))
 		_add(CITY % "bench", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * S_CITY), c))
-	else:  # mały parking
-		_flat_box(c, Vector2(8.6, 8.6), Color(0.27, 0.27, 0.3), 0.004)
-		if _rng.randf() < 0.7:
-			var heading: float = PI * 0.5 * _rng.randi_range(0, 3)
-			var pos: Vector3 = c + Vector3(0, 0.27, 0)
-			_add(CITY % CARS[_rng.randi_range(0, CARS.size() - 1)], Transform3D(Basis(Vector3.UP, heading).scaled(Vector3.ONE * S_CITY), pos))
-			_box_collider(pos + Vector3(0, 0.6, 0), Vector3(1.9, 1.5, 4.2), heading)
+	else:  # skwer: krzewy wokół ławki i niskie drzewko
+		for k in _rng.randi_range(3, 5):
+			var p3: Vector3 = c + Vector3(_rng.randf_range(-3.8, 3.8), 0, _rng.randf_range(-3.8, 3.8))
+			_add(NATURE % BUSHES[_rng.randi_range(0, BUSHES.size() - 1)],
+					Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 2.2), p3))
+		_add(CITY % "bench", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * S_CITY), c))
 
 
 ## Płot wokół działki Siedziby z przerwą na wjazd (od strony ulicy przy bramie garażu).

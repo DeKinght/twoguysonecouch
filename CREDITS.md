@@ -14,3 +14,4 @@
 | City Kit Industrial 2.0 | Kenney (www.kenney.nl) | CC0 1.0 | `assets/models/industrial/` |
 
 Palety `assets/models/{suburban,commercial,industrial}/Variations/` pochodzą z tych samych paczek Kenney (CC0).
+| Watercraft Pack | Kenney (www.kenney.nl) | CC0 1.0 | `assets/models/watercraft/` |

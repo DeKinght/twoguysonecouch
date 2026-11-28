@@ -390,46 +390,85 @@ func _crane(m: Vector2i, d: int) -> void:
 	gen._merge_box(Transform3D(Basis(Vector3.UP, atan2(side.x, side.z)), at.call(0, h - 12.4, trolley)), Vector3(2.6, 0.5, 6.0), C_YELLOW)
 
 
-## Statek przy każdym dłuższym odcinku portu (stoi na wodzie, dekoracja bez kolizji).
+const WATERCRAFT: String = "res://assets/models/watercraft/%s.glb"
+const SHIP_SCALE: float = 7.0
+
+
+## Statki z Kenney Watercraft: kontenerowiec przy dłuższym nabrzeżu, statki na redzie
+## (na otwartym morzu przed portem), holownik pływający wzdłuż nabrzeża, boje toru wodnego.
 func _build_ships() -> void:
-	var types_list: Array[int] = []
-	for mm in ring:
-		types_list.append(types[mm])
-	for run: Array in _runs(types_list):
-		if run[2] != PORT or run[1] < 6:
-			continue
-		# Środkowy, prosty fragment odcinka (bez narożnika).
-		var mid_i: int = (run[0] + run[1] / 2) % ring.size()
-		var m: Vector2i = ring[mid_i]
-		var outs: Array[int] = _outward_dirs(m)
-		if outs.size() != 1:
-			continue
-		var out: Vector3 = _dir3(outs[0])
+	for sub: Array in _side_runs(PORT):
+		var mid: Vector2i = sub[sub.size() / 2]
+		var out: Vector3 = _dir3(_outward_dirs(mid)[0])
 		var side: Vector3 = out.cross(Vector3.UP)
-		var yaw: float = atan2(side.x, side.z)
-		var length: float = minf(run[1] * WorldGenerator.M - 24.0, 92.0)
-		var c: Vector3 = _edge_mid(m, outs[0]) + out * 13.0
-		var basis := Basis(Vector3.UP, yaw)
-		var t := func(x: float, y: float, z: float) -> Transform3D:
-			return Transform3D(basis, c + side * x + Vector3.UP * y + out * z)
-		gen._merge_box(t.call(0, -2.4, 0), Vector3(14.0, 3.2, length), Color(0.55, 0.16, 0.14), false)
-		gen._merge_box(t.call(0, 0.9, 0), Vector3(14.0, 3.4, length), Color(0.16, 0.24, 0.38), false)
-		gen._merge_box(t.call(length * 0.5 + 3.0, 0.4, 0), Vector3(9.0, 4.6, 6.0), Color(0.16, 0.24, 0.38), false)
-		gen._merge_box(t.call(length * 0.5 + 6.5, 0.6, 0), Vector3(4.5, 4.2, 3.0), Color(0.16, 0.24, 0.38), false)
-		var stern: float = -length * 0.5 + 6.0
-		gen._merge_box(t.call(stern, 7.2, 0), Vector3(12.0, 9.2, 9.0), C_WHITE, false)
-		gen._merge_box(t.call(stern + 0.1, 10.6, 0), Vector3(12.2, 1.2, 9.2), Color(0.15, 0.2, 0.28), false)
-		gen._merge_box(t.call(stern - 2.0, 14.0, 0), Vector3(3.0, 4.0, 3.0), C_RED, false)
-		var x: float = stern + 8.0
-		while x < length * 0.5 - 3.0:
-			for row in 5:
-				var z: float = -4.8 + row * 2.4
-				var levels: int = _rng.randi_range(1, 3)
-				for lv in levels:
-					var name: String = "shipping-container-" + ["a", "b", "c"][_rng.randi_range(0, 2)]
-					var p: Vector3 = c + side * x + out * z + Vector3.UP * (2.6 + lv * 2.1)
-					gen._add(WorldGenerator.IND % name, Transform3D(basis.scaled(Vector3.ONE * 6.0), p), _rng.randi_range(0, 3))
-			x += 5.2
+		var edge: Vector3 = _edge_mid(mid, _outward_dirs(mid)[0])
+		var yaw: float = atan2(side.x, side.z)  # model statku: długość wzdłuż lokalnej osi Z
+		if sub.size() >= 6:
+			var ship: String = ["ship-cargo-a", "ship-cargo-a", "ship-cargo-c"][_rng.randi_range(0, 2)]
+			_place_ship(ship, edge + out * (3.92 * SHIP_SCALE * 0.5 + 2.5), yaw + (PI if _rng.randf() < 0.5 else 0.0), SHIP_SCALE)
+		if sub.size() >= 4:
+			var tug := _Boat.new()
+			tug.name = "Tug"
+			gen.add_child(tug)
+			var half_len: float = sub.size() * WorldGenerator.M * 0.45
+			tug.setup(WATERCRAFT % "boat-tug-a", edge + out * 40.0 + Vector3(0, WATER_Y - 0.4, 0), side, half_len, 4.5)
+		# Boje toru wodnego.
+		for k in 3:
+			for s_: float in [-1.0, 1.0]:
+				var p: Vector3 = edge + out * (70.0 + k * 45.0) + side * s_ * 28.0
+				gen._add(WATERCRAFT % "buoy", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 3.0), Vector3(p.x, WATER_Y - 0.3, p.z)))
+	# Statki na redzie: kilka miejsc na głębokiej wodzie przed portem.
+	var placed: int = 0
+	for arc: Array in _sea_arcs:
+		for attempt in 12:
+			if placed >= 2 + _sea_arcs.size():
+				break
+			var ang: float = arc[0] + _rng.randf_range(-arc[1] - 0.4, arc[1] + 0.4)
+			var dist: float = _rng.randf_range(260.0, 520.0)
+			var c: Vector2 = rect.get_center() + Vector2.from_angle(ang) * (rect.size.length() * 0.5 + dist)
+			if _height(c) > SEABED - 1.0:
+				continue
+			var ship: String = ["ship-cargo-a", "ship-cargo-b", "ship-cargo-c"][_rng.randi_range(0, 2)]
+			_place_ship(ship, Vector3(c.x, 0, c.y), _rng.randf() * TAU, SHIP_SCALE * _rng.randf_range(0.9, 1.15))
+			placed += 1
+
+
+func _place_ship(model: String, at: Vector3, yaw: float, scale: float) -> void:
+	var path: String = WATERCRAFT % model
+	if not ResourceLoader.exists(path):
+		return
+	# Zanurzenie ~1/4 wysokości kadłuba.
+	var t := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * scale), Vector3(at.x, WATER_Y - 0.55 * scale, at.z))
+	gen._add(path, t)
+
+
+## Łódka pływająca tam i z powrotem po prostej (dekoracja, liczona lokalnie).
+class _Boat:
+	extends Node3D
+	var _a: Vector3
+	var _dir: Vector3
+	var _half: float
+	var _speed: float
+	var _t: float = 0.0
+	var _model: Node3D
+
+	func setup(path: String, center: Vector3, dir: Vector3, half_len: float, speed: float) -> void:
+		_a = center
+		_dir = dir.normalized()
+		_half = half_len
+		_speed = speed
+		_model = (load(path) as PackedScene).instantiate()
+		_model.scale = Vector3.ONE * 4.5
+		add_child(_model)
+
+	func _process(delta: float) -> void:
+		if _model == null:
+			return
+		_t += delta * _speed / maxf(_half, 1.0)
+		var s: float = sin(_t)  # łagodne zwalnianie i zawracanie na końcach
+		var heading: Vector3 = _dir * (1.0 if cos(_t) >= 0.0 else -1.0)
+		_model.global_position = _a + _dir * s * _half + Vector3(0, sin(_t * 3.0) * 0.08, 0)
+		_model.rotation.y = lerp_angle(_model.rotation.y, atan2(heading.x, heading.z), clampf(delta * 1.5, 0.0, 1.0))
 
 
 # --- Obwodnica ------------------------------------------------------------------------------
@@ -486,36 +525,25 @@ func _billboard(at: Vector3, facing: Vector3) -> void:
 	gen.add_child(label)
 
 
-## Estakada: łamana po obwodzie (zaokrąglone narożniki), na końcach odcinka skręca od miasta
-## i znika w tunelu we wzgórzu albo we mgle. Jezdnia, bariera środkowa, bariery boczne,
-## ekrany akustyczne od strony miasta, filary co ~13,5 m.
+## Estakada: osobno na każdym boku miasta (bez narożników), na obu końcach odbija
+## łagodnym łukiem od miasta i znika w tunelu we wzgórzu albo we mgle.
+## Geometria to jedna ciągła bryła wyciągnięta wzdłuż trasy (bez szczelin na łukach).
+const TURN_RADIUS: float = 70.0
+const MIN_DECK_RUN: int = 8      ## krótsze odcinki obwodnicy - tylko zieleń / parking, bez estakady
+
+
 func _build_highways() -> void:
-	var types_list: Array[int] = []
-	for mm in ring:
-		types_list.append(types[mm])
-	var runs: Array = _runs(types_list)
 	var paths: Array = []
-	for run: Array in runs:
-		if run[2] != HIGHWAY:
+	for sub: Array in _side_runs(HIGHWAY):
+		if sub.size() < MIN_DECK_RUN:
 			continue
-		var pts := PackedVector3Array()
-		var closed: bool = runs.size() == 1
-		for k in run[1] + (1 if closed else 0):
-			pts.append(_ring_point(ring[(run[0] + k) % ring.size()]))
-		if not closed:
-			var first: Vector3 = pts[0]
-			var last: Vector3 = pts[pts.size() - 1]
-			var lead: PackedVector3Array = _exit_leg(first, _ring_normal(ring[run[0]]))
-			var tail: PackedVector3Array = _exit_leg(last, _ring_normal(ring[(run[0] + run[1] - 1) % ring.size()]))
-			lead.reverse()
-			var all := PackedVector3Array()
-			all.append_array(lead)
-			all.append_array(pts)
-			all.append_array(tail)
-			pts = all
-		pts = _resample(_round_corners(pts, 18.0), 4.5)
-		_deck(pts)
-		paths.append([pts, closed])
+		var n: Vector3 = _ring_normal(sub[0])
+		var a: Vector3 = _ring_point(sub[0])
+		var b: Vector3 = _ring_point(sub[sub.size() - 1])
+		var poly := PackedVector3Array([a + n * _leg_length(a, n), a, b, b + n * _leg_length(b, n)])
+		var pts: PackedVector3Array = _smooth_path(poly, TURN_RADIUS, 3.0)
+		_extrude_deck(pts)
+		paths.append([pts, false])
 	if not paths.is_empty():
 		var traffic := HighwayTraffic.new()
 		traffic.name = "HighwayTraffic"
@@ -523,7 +551,31 @@ func _build_highways() -> void:
 		traffic.setup(paths, DECK_H, gen.seed_value)
 
 
-## Punkt osi estakady naprzeciw modułu brzegowego.
+## Ciągłe odcinki danego typu na jednym boku (moduły z jednym kierunkiem na zewnątrz).
+func _side_runs(kind: int) -> Array:
+	var out: Array = []
+	var cur: Array = []
+	var cur_dir: int = -1
+	for i in ring.size() + 1:
+		var m: Vector2i = ring[i % ring.size()]
+		var outs: Array[int] = _outward_dirs(m)
+		var ok: bool = i < ring.size() and types[m] == kind and outs.size() == 1
+		if ok and (cur.is_empty() or outs[0] == cur_dir):
+			cur.append(m)
+			cur_dir = outs[0]
+			continue
+		if not cur.is_empty():
+			out.append(cur)
+		cur = [m] if ok else []
+		cur_dir = outs[0] if ok else -1
+	# Odcinek na początku listy może być dalszym ciągiem ostatniego (obwód jest cykliczny).
+	if out.size() > 1 and out[0][0] == ring[0] and out[-1][-1] == ring[ring.size() - 1] \
+			and _outward_dirs(out[0][0]) == _outward_dirs(out[-1][-1]):
+		out[-1].append_array(out[0])
+		out.remove_at(0)
+	return out
+
+
 func _ring_point(m: Vector2i) -> Vector3:
 	var p: Vector3 = gen._center(m)
 	for d: int in _outward_dirs(m):
@@ -538,102 +590,166 @@ func _ring_normal(m: Vector2i) -> Vector3:
 	return n.normalized()
 
 
-## Wylot estakady od miasta: prosto na zewnątrz aż teren ją przykryje (tunel) albo 380 m (mgła).
-func _exit_leg(from: Vector3, normal: Vector3) -> PackedVector3Array:
-	var pts := PackedVector3Array()
-	var d: float = 24.0
+## Długość wylotu: do miejsca, gdzie teren przykrywa jezdnię (portal tunelu), albo 380 m.
+func _leg_length(from: Vector3, normal: Vector3) -> float:
+	var d: float = TURN_RADIUS + 10.0
 	while d < 380.0:
 		var p: Vector3 = from + normal * d
-		pts.append(p)
 		if _height(Vector2(p.x, p.z)) > DECK_H + 2.0:
 			_portal(p, normal)
-			pts.append(from + normal * (d + 30.0))
-			break
-		d += 12.0
-	return pts
+			return d + 30.0
+		d += 6.0
+	return 380.0
 
 
 func _portal(at: Vector3, normal: Vector3) -> void:
-	var basis := Basis(Vector3.UP, atan2(normal.cross(Vector3.UP).x, normal.cross(Vector3.UP).z))
+	var side: Vector3 = normal.cross(Vector3.UP)
+	var basis := Basis(Vector3.UP, atan2(side.x, side.z))
 	gen._merge_box(Transform3D(basis, at + Vector3(0, 6.5, 0)), Vector3(1.6, 13.0, DECK_W + 8.0), C_CONCRETE, false)
 	gen._merge_box(Transform3D(basis, at + Vector3(0, DECK_H + 3.0, 0) - normal * 0.1), Vector3(1.9, 6.0, DECK_W - 1.0), Color(0.04, 0.04, 0.05), false)
 
 
-func _deck(pts: PackedVector3Array) -> void:
-	for i in pts.size() - 1:
-		var a: Vector3 = pts[i]
-		var b: Vector3 = pts[i + 1]
-		var mid: Vector3 = (a + b) * 0.5
-		var ground: float = _height(Vector2(mid.x, mid.z))
-		if ground > DECK_H + 0.4:
-			continue  # w tunelu - przykrywa teren
-		var dir: Vector3 = (b - a).normalized()
-		var right: Vector3 = dir.cross(Vector3.UP)
-		var len: float = a.distance_to(b) + 0.35
-		var basis := Basis.looking_at(dir, Vector3.UP)
-		var shadow: bool = rect.grow(30.0).has_point(Vector2(mid.x, mid.z))
-		var t := func(x: float, y: float) -> Transform3D:
-			return Transform3D(basis, mid + right * x + Vector3.UP * y)
-		gen._merge_box(t.call(0, DECK_H - 0.6), Vector3(DECK_W, 1.2, len), C_CONCRETE, shadow)
-		gen._merge_box(t.call(0, DECK_H + 0.02), Vector3(DECK_W - 1.0, 0.05, len), C_ASPHALT, shadow)
-		gen._merge_box(t.call(0, DECK_H + 0.45), Vector3(0.6, 0.9, len), C_CONCRETE, shadow)
-		for x: float in [-DECK_W * 0.5 + 0.25, DECK_W * 0.5 - 0.25]:
-			gen._merge_box(t.call(x, DECK_H + 0.5), Vector3(0.5, 1.0, len), C_CONCRETE, shadow)
-		if i % 2 == 0:
-			for x: float in [-3.1, 3.1]:
-				gen._merge_box(t.call(x, DECK_H + 0.06), Vector3(0.15, 0.02, 2.2), C_WHITE, false)
-		# Ekran akustyczny po stronie miasta - tylko na odcinku wzdłuż krawędzi (nie na wylotach).
-		if _out_dist(Vector2(mid.x, mid.z)) < DECK_OFF + 3.0:
-			var edge_x: float = DECK_W * 0.5 - 0.25
-			var left: Vector3 = mid - right * edge_x
-			var right_p: Vector3 = mid + right * edge_x
-			var x_city: float = -edge_x if _out_dist(Vector2(left.x, left.z)) < _out_dist(Vector2(right_p.x, right_p.z)) else edge_x
-			gen._merge_box(t.call(x_city, DECK_H + 2.6), Vector3(0.2, 3.2, len), C_PANEL, shadow)
-			if i % 2 == 0:
-				gen._merge_box(t.call(x_city, DECK_H + 2.6), Vector3(0.35, 3.4, 0.3), C_CONCRETE_DARK, shadow)
-		# Filary.
-		if i % 3 == 0 and ground < DECK_H - 2.0:
-			var base: float = maxf(ground, SEABED) - 0.3
-			var col_h: float = DECK_H - 1.4 - base
-			gen._merge_box(Transform3D(basis, Vector3(mid.x, base + col_h * 0.5, mid.z)), Vector3(1.5, col_h, 1.5), C_CONCRETE, shadow)
-			gen._merge_box(t.call(0, DECK_H - 1.7), Vector3(DECK_W - 2.5, 1.0, 1.8), C_CONCRETE_DARK, shadow)
-
-
-func _round_corners(pts: PackedVector3Array, radius: float) -> PackedVector3Array:
-	if pts.size() < 3:
-		return pts
-	var out := PackedVector3Array([pts[0]])
-	for i in range(1, pts.size() - 1):
-		var a: Vector3 = pts[i - 1]
-		var b: Vector3 = pts[i]
-		var c: Vector3 = pts[i + 1]
+## Łamana z zaokrąglonymi narożnikami (łuki o promieniu do `radius`), punkty co ~`step` m.
+func _smooth_path(poly: PackedVector3Array, radius: float, step: float) -> PackedVector3Array:
+	var out := PackedVector3Array([poly[0]])
+	for i in range(1, poly.size() - 1):
+		var a: Vector3 = poly[i - 1]
+		var b: Vector3 = poly[i]
+		var c: Vector3 = poly[i + 1]
 		var d1: Vector3 = (b - a).normalized()
 		var d2: Vector3 = (c - b).normalized()
-		if d1.dot(d2) > 0.999:
-			out.append(b)
-			continue
-		var r: float = minf(radius, minf(a.distance_to(b), b.distance_to(c)) * 0.45)
+		var r: float = minf(radius, minf(a.distance_to(b), b.distance_to(c)) * 0.48)
 		var p0: Vector3 = b - d1 * r
 		var p1: Vector3 = b + d2 * r
-		for k in 7:  # krzywa Béziera przez narożnik
-			var t: float = k / 6.0
-			out.append(p0.lerp(b, t).lerp(b.lerp(p1, t), t))
-	out.append(pts[pts.size() - 1])
-	return out
-
-
-func _resample(pts: PackedVector3Array, step: float) -> PackedVector3Array:
-	var out := PackedVector3Array([pts[0]])
-	for i in range(1, pts.size()):
-		var a: Vector3 = out[out.size() - 1]
-		var b: Vector3 = pts[i]
-		var d: float = a.distance_to(b)
-		if d < 0.01:
-			continue
-		var n: int = maxi(1, int(ceil(d / step)))
+		_line_to(out, p0, step)
+		var n: int = maxi(8, int(ceil(r * 1.6 / step)))
 		for k in range(1, n + 1):
-			out.append(a.lerp(b, float(k) / n))
+			var t: float = float(k) / n
+			out.append(p0.lerp(b, t).lerp(b.lerp(p1, t), t))
+	_line_to(out, poly[poly.size() - 1], step)
 	return out
+
+
+func _line_to(out: PackedVector3Array, to: Vector3, step: float) -> void:
+	var from: Vector3 = out[out.size() - 1]
+	var d: float = from.distance_to(to)
+	var n: int = maxi(1, int(ceil(d / step)))
+	for k in range(1, n + 1):
+		out.append(from.lerp(to, float(k) / n))
+
+
+## Przekrój estakady wyciągnięty wzdłuż trasy: [x od, x do, y od, y do, kolor, tylko ekran?].
+const DECK_PROFILE: Array = [
+	[-6.5, 6.5, -1.2, 0.0, 0], [-6.0, 6.0, 0.0, 0.05, 1], [-6.5, -6.0, 0.0, 1.0, 0], [6.0, 6.5, 0.0, 1.0, 0],
+	[-0.3, 0.3, 0.0, 0.9, 0],
+]
+
+
+func _extrude_deck(pts: PackedVector3Array) -> void:
+	var n: int = pts.size()
+	var frames: Array = []  # [punkt, wektor w prawo, widoczny, ekran po stronie (-1/0/1)]
+	for i in n:
+		var t: Vector3 = (pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]).normalized()
+		var right: Vector3 = t.cross(Vector3.UP).normalized()
+		var p: Vector3 = pts[i]
+		var ground: float = _height(Vector2(p.x, p.z))
+		var wall: int = 0
+		if _out_dist(Vector2(p.x, p.z)) < DECK_OFF + 3.0:
+			var l: Vector3 = p - right * 6.25
+			var r: Vector3 = p + right * 6.25
+			wall = -1 if _out_dist(Vector2(l.x, l.z)) < _out_dist(Vector2(r.x, r.z)) else 1
+		frames.append([p, right, ground <= DECK_H + 0.4, wall, ground])
+	var colors: Array[Color] = [C_CONCRETE, C_ASPHALT, C_PANEL]
+	var chunk := _Extruder.new()
+	var travelled: float = 0.0
+	var next_pillar: float = 0.0
+	for i in n - 1:
+		var f0: Array = frames[i]
+		var f1: Array = frames[i + 1]
+		if f0[2] and f1[2]:
+			for part: Array in DECK_PROFILE:
+				chunk.prism(f0, f1, part[0], part[1], DECK_H + part[2], DECK_H + part[3], colors[part[4]])
+			if f0[3] != 0 and f1[3] == f0[3]:
+				var x: float = f0[3] * 6.25
+				chunk.prism(f0, f1, x - 0.1, x + 0.1, DECK_H + 1.0, DECK_H + 4.2, C_PANEL)
+			var seg: Vector3 = (f1[0] as Vector3) - (f0[0] as Vector3)
+			if i % 4 == 0:
+				for lane: float in [-3.1, 3.1]:
+					var mid: Vector3 = (f0[0] as Vector3).lerp(f1[0], 0.5) + (f0[1] as Vector3) * lane + Vector3(0, DECK_H + 0.07, 0)
+					gen._merge_box(Transform3D(Basis.looking_at(seg.normalized(), Vector3.UP), mid), Vector3(0.15, 0.02, 2.2), C_WHITE, false)
+			if f0[3] != 0 and i % 5 == 0:
+				var post: Vector3 = (f0[0] as Vector3) + (f0[1] as Vector3) * (f0[3] * 6.25) + Vector3(0, DECK_H + 2.6, 0)
+				gen._merge_box(Transform3D(Basis.looking_at(seg.normalized(), Vector3.UP), post), Vector3(0.35, 3.4, 0.3), C_CONCRETE_DARK)
+			if travelled >= next_pillar and float(f0[4]) < DECK_H - 2.0:
+				next_pillar = travelled + 15.0
+				var basis := Basis.looking_at(seg.normalized(), Vector3.UP)
+				var base: float = maxf(f0[4], SEABED) - 0.3
+				var h: float = DECK_H - 1.4 - base
+				var shadow: bool = rect.grow(30.0).has_point(Vector2(f0[0].x, f0[0].z))
+				gen._merge_box(Transform3D(basis, Vector3(f0[0].x, base + h * 0.5, f0[0].z)), Vector3(1.5, h, 1.5), C_CONCRETE, shadow)
+				gen._merge_box(Transform3D(basis, (f0[0] as Vector3) + Vector3(0, DECK_H - 1.7, 0)), Vector3(DECK_W - 2.5, 1.0, 1.8), C_CONCRETE_DARK, shadow)
+		travelled += (f0[0] as Vector3).distance_to(f1[0])
+		if chunk.quads > 900 or i == n - 2:
+			var near: bool = rect.grow(40.0).has_point(Vector2(f1[0].x, f1[0].z))
+			chunk.flush(gen, near)
+			chunk = _Extruder.new()
+
+
+## Zbiera prostopadłościany wyciągnięte między kolejnymi przekrojami trasy w jedną siatkę.
+class _Extruder:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	var quads: int = 0
+
+	## Prostopadłościan od przekroju f0 do f1: x - w poprzek (w prawo), y - wysokość.
+	func prism(f0: Array, f1: Array, x0: float, x1: float, y0: float, y1: float, col: Color) -> void:
+		var p0: Vector3 = f0[0]
+		var r0: Vector3 = f0[1]
+		var p1: Vector3 = f1[0]
+		var r1: Vector3 = f1[1]
+		var c := func(p: Vector3, r: Vector3, x: float, y: float) -> Vector3:
+			return Vector3(p.x, 0, p.z) + r * x + Vector3.UP * y
+		_quad(c.call(p0, r0, x0, y1), c.call(p0, r0, x1, y1), c.call(p1, r1, x1, y1), c.call(p1, r1, x0, y1), Vector3.UP, Vector3.UP, col)
+		_quad(c.call(p0, r0, x0, y0), c.call(p0, r0, x1, y0), c.call(p1, r1, x1, y0), c.call(p1, r1, x0, y0), Vector3.DOWN, Vector3.DOWN, col)
+		_quad(c.call(p0, r0, x1, y0), c.call(p0, r0, x1, y1), c.call(p1, r1, x1, y1), c.call(p1, r1, x1, y0), r0, r1, col)
+		_quad(c.call(p0, r0, x0, y0), c.call(p0, r0, x0, y1), c.call(p1, r1, x0, y1), c.call(p1, r1, x0, y0), -r0, -r1, col)
+
+	func _quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n0: Vector3, n1: Vector3, col: Color) -> void:
+		var base: int = verts.size()
+		var n_mid: Vector3 = (n0 + n1).normalized()
+		verts.append_array([a, b, c, d])
+		norms.append_array([n0, n0, n1, n1] if n0 != n1 else [n0, n0, n0, n0])
+		cols.append_array([col, col, col, col])
+		# Front Godota = zgodnie ze wskazówkami: normalna z iloczynu ma wskazywać do środka.
+		if (b - a).cross(c - a).dot(n_mid) > 0.0:
+			idx.append_array([base, base + 2, base + 1, base, base + 3, base + 2])
+		else:
+			idx.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+		quads += 1
+
+	func flush(gen: WorldGenerator, shadow: bool) -> void:
+		if verts.is_empty():
+			return
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = norms
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_INDEX] = idx
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var mat := StandardMaterial3D.new()
+		mat.vertex_color_use_as_albedo = true
+		mat.vertex_color_is_srgb = true
+		mat.roughness = 0.85
+		mesh.surface_set_material(0, mat)
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		if not shadow:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		gen.add_child(mi)
 
 
 # --- Wzgórza: ogródki działkowe ---------------------------------------------------------------

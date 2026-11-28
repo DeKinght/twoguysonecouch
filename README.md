@@ -122,4 +122,8 @@ Część wylotów ulic jest zamknięta (zapora, pachołki, tablica) i prowadzi d
 estakadą / brama portu. Teren to jedna siatka z kolorami wierzchołków (dolina zamknięta pasmem gór),
 las daleko to MultiMesh prostych drzewek bez cieni. Statyczne bryły (krawędź, płoty, place) trafiają do
 zbiorczych siatek - jedna na kwadrat 72 m (`WorldGenerator._merge_box`).
+- Estakada to jedna ciągła bryła wyciągnięta wzdłuż trasy (bez szczelin), osobno na każdym boku miasta (min. 8 modułów),
+  na końcach odbija od miasta łukiem o promieniu do 70 m. Port: kontenerowiec z Kenney Watercraft przy nabrzeżu,
+  statki na redzie, holownik i boje. Parkingi: rzędy miejsc w śródmieściu i pod estakadą, auta na podjazdach
+  przed niektórymi domami (bez pojedynczych aut na skwerach).
 
