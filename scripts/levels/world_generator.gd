@@ -297,9 +297,13 @@ func _setup_districts() -> void:
 
 
 func _district_of(m: Vector2i) -> int:
-	if _district.has(m):
-		return _district[m]
-	var p: Vector2 = _center2(m)
+	if not _district.has(m):
+		_district[m] = _district_at(_center2(m))
+	return _district[m]
+
+
+## Dzielnica w dowolnym punkcie (także w panoramie za murem - tło pasuje do miasta przed nim).
+func _district_at(p: Vector2) -> int:
 	var scores: Array[float] = [
 		0.55 + _noise[0].get_noise_2dv(p) * 0.3,
 		1.25 * exp(-pow(p.distance_to(_downtown) / 150.0, 2.0)) + _noise[1].get_noise_2dv(p) * 0.3,
@@ -313,7 +317,6 @@ func _district_of(m: Vector2i) -> int:
 	for k in 3:
 		if scores[k] > scores[best]:
 			best = k
-	_district[m] = best
 	return best
 
 
@@ -508,13 +511,22 @@ func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bo
 	if district == COMMERCIAL or district == INDUSTRIAL:
 		_flat_box(center, Vector2(M * width, M) if d in [N, S] else Vector2(M, M * width),
 				PAVING[district], 0.012)
-	# Stare kamienice KayKit (z podstawą 9 x 9 m) w śródmieściu i na obrzeżu przedmieść.
-	if width == 1 and (district == COMMERCIAL and _rng.randf() < 0.3 or district == SUBURBAN and boundary):
-		var list: Array[String] = TALL if boundary else BUILDINGS
-		var letter: String = list[_rng.randi_range(0, list.size() - 1)]
+	# Stare kamienice KayKit (z podstawą 9 x 9 m) w śródmieściu i na obrzeżu.
+	var kaykit_chance: float = 0.3 if district == COMMERCIAL else 0.0
+	if boundary:
+		kaykit_chance = [0.45, 0.35, 0.15][district]
+	if width == 1 and _rng.randf() < kaykit_chance:
+		var letter: String = BUILDINGS[_rng.randi_range(0, BUILDINGS.size() - 1)]
+		var recent_k: Array = _recent.get(street, [])
+		if ("kaykit|" + letter) in recent_k:
+			letter = BUILDINGS[(BUILDINGS.find(letter) + _rng.randi_range(1, BUILDINGS.size() - 1)) % BUILDINGS.size()]
+		recent_k.append("kaykit|" + letter)
+		_recent[street] = recent_k.slice(-2)
 		_place_kaykit(center, d, letter)
 		return
-	var choice: Array = _pick_model(district, lot, boundary, _recent.get(street, []))
+	# Na obrzeżu przedmieść: niskie kamienice i domy z paczki Commercial (zwarta, ale różna pierzeja).
+	var pick_district: int = COMMERCIAL if boundary and district == SUBURBAN else district
+	var choice: Array = _pick_model(pick_district, lot, boundary and district != SUBURBAN, _recent.get(street, []))
 	if choice.is_empty():
 		return
 	var path: String = choice[0]
@@ -525,7 +537,7 @@ func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bo
 	_recent[street] = recent.slice(-2)
 
 	# Nie od linijki: cofnięcie od ulicy, przesunięcie w bok i lekki obrót w granicach działki.
-	var rule: Array = PLACEMENT[district]
+	var rule: Array = PLACEMENT[district] if not boundary else [0.0, 0.25, 0.4, 2.0]
 	var box: AABB = _model_aabb(path)
 	var size: Vector3 = box.size * s
 	var to_road := Vector3(dir.x, 0, dir.y)
@@ -533,8 +545,6 @@ func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bo
 	var slack_depth: float = maxf(lot.y - size.z, 0.0)
 	var slack_side: float = maxf(lot.x - size.x, 0.0)
 	var setback: float = slack_depth * _rng.randf_range(rule[0], rule[1])
-	if boundary:
-		setback = 0.0
 	var place: Vector3 = center + to_road * (slack_depth * 0.5 - setback) \
 			+ along * slack_side * 0.5 * rule[2] * _rng.randf_range(-1.0, 1.0)
 	var yaw: float = deg_to_rad(rule[3]) * _rng.randf_range(-1.0, 1.0)
@@ -559,10 +569,13 @@ func _place_kaykit(center: Vector3, d: int, letter: String) -> void:
 	var dir: Vector2i = DIRS[d]
 	var rot: float = atan2(float(dir.x), float(dir.y))  # front KayKit = lokalne +Z
 	var basis := Basis(Vector3.UP, rot)
-	_add(CITY % ("building_" + letter), Transform3D(basis.scaled(Vector3.ONE * S_CITY), center + Vector3(0, -BASE_SINK + 0.006, 0)))
+	# Różna wysokość kondygnacji: ta sama podstawa 9 x 9 m, budynek od 85% do 120% wysokości.
+	var tall: float = _rng.randf_range(0.85, 1.2)
+	_add(CITY % ("building_" + letter), Transform3D(basis.scaled(Vector3(S_CITY, S_CITY * tall, S_CITY)), center + Vector3(0, -BASE_SINK * tall + 0.006, 0)))
 	var box: AABB = _model_aabb(CITY % ("building_" + letter + "_withoutBase"))
 	var lc := box.get_center() * S_CITY
-	_box_collider(center + basis * Vector3(lc.x, 0, lc.z) + Vector3(0, box.size.y * S_CITY * 0.5, 0), box.size * S_CITY, rot)
+	var h: float = box.size.y * S_CITY * tall
+	_box_collider(center + basis * Vector3(lc.x, 0, lc.z) + Vector3(0, h * 0.5, 0), Vector3(box.size.x * S_CITY, h, box.size.z * S_CITY), rot)
 
 
 ## Losuje model danej dzielnicy, który zmieści się na działce w rozsądnej skali.
@@ -753,11 +766,12 @@ func _build_backdrop() -> void:
 	var lowdet: Array[String] = []
 	for c in "abcdefghijklm":
 		lowdet.append("low-detail-building-" + c)
-	# Trzy pierścienie bloków: gęsto przy murze, potem rzadziej i niżej, przetykane lasem.
+	# Trzy pierścienie: tuż za murem prawdziwe budynki tej dzielnicy (we mgle), dalej proste bryły
+	# o wysokościach jak w mieście przed nimi - przedmieście nisko, śródmieście wyżej, przemysł średnio.
 	for ring in 3:
 		var inner: float = 4.0 + ring * 55.0
-		var step: float = 13.0 + ring * 6.0
-		var density: float = [0.95, 0.6, 0.35][ring]
+		var step: float = 14.0 + ring * 6.0
+		var density: float = [0.85, 0.6, 0.4][ring]
 		var x: float = lo.x - inner - 50.0
 		while x < hi.x + inner + 50.0:
 			var z: float = lo.y - inner - 50.0
@@ -765,18 +779,19 @@ func _build_backdrop() -> void:
 				var p := Vector2(x, z)
 				var outside: float = maxf(absf(p.x - center.x) - half.x, absf(p.y - center.y) - half.y)
 				if outside > inner and outside < inner + 55.0:
-					var jitter := Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
-					var q: Vector2 = p + jitter
-					if _rng.randf() < density:
-						var name: String = lowdet[_rng.randi_range(0, lowdet.size() - 1)]
-						var s: float = _rng.randf_range(16.0, 22.0) * (1.0 - ring * 0.12)
-						var near_industry: bool = q.distance_to(_industry) < 260.0
-						_add(COM % name, Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(Vector3(s, s * (0.6 if near_industry else 1.0), s)), Vector3(q.x, 0, q.y)))
-					elif _rng.randf() < 0.7:
+					var q: Vector2 = p + Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
+					var district: int = _district_at(q)
+					var trees: float = [0.75, 0.35, 0.5][district]  # przedmieście: dużo zieleni
+					if _rng.randf() < density * (1.0 - trees * 0.5):
+						if ring == 0:
+							_backdrop_model(q, district)
+						else:
+							_backdrop_block(q, district, lowdet, ring)
+					elif _rng.randf() < 0.4 + trees * 0.5:
 						for k in 3:
 							var t: Vector2 = q + Vector2(_rng.randf_range(-5, 5), _rng.randf_range(-5, 5))
 							_add(NATURE % TREES[_rng.randi_range(0, TREES.size() - 1)],
-									Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(2.0, 3.2)), Vector3(t.x, 0, t.y)))
+									Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(1.6, 2.4)), Vector3(t.x, 0, t.y)))
 				z += step
 			x += step
 	# Wzgórza na horyzoncie.
@@ -799,6 +814,29 @@ func _build_backdrop() -> void:
 		hill.rotation.y = a
 		hill.position = Vector3(center.x + cos(a) * r, -hill.scale.y * 0.35, center.y + sin(a) * r)
 		add_child(hill)
+
+
+## Prawdziwy budynek dzielnicy w tle (bez kolizji - za murem i niewidzialną ścianą).
+func _backdrop_model(q: Vector2, district: int) -> void:
+	var choice: Array = _pick_model(district, Vector2(12.0, 12.0), false)
+	if choice.is_empty():
+		return
+	var rot: float = PI * 0.5 * _rng.randi_range(0, 3) + _rng.randf_range(-0.1, 0.1)
+	var box: AABB = _model_aabb(choice[0])
+	var c: Vector3 = Basis(Vector3.UP, rot) * (box.get_center() * choice[1])
+	_add(choice[0], Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * choice[1]), Vector3(q.x - c.x, 0.01, q.y - c.z)), choice[2])
+
+
+## Prosta bryła w kolorze mgły o wysokości typowej dla dzielnicy [m].
+func _backdrop_block(q: Vector2, district: int, lowdet: Array[String], ring: int) -> void:
+	var heights: Array = [[6.0, 10.0], [14.0, 34.0], [8.0, 16.0]]
+	var widths: Array = [[8.0, 11.0], [9.0, 13.0], [12.0, 18.0]]
+	var name: String = lowdet[_rng.randi_range(0, lowdet.size() - 1)]
+	var box: AABB = _model_aabb(COM % name)
+	var h: float = _rng.randf_range(heights[district][0], heights[district][1]) * (1.0 - ring * 0.1)
+	var w: float = _rng.randf_range(widths[district][0], widths[district][1])
+	var scale := Vector3(w / box.size.x, h / box.size.y, w / box.size.z * _rng.randf_range(0.7, 1.3))
+	_add(COM % name, Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(scale), Vector3(q.x, 0, q.y)))
 
 
 ## Mgła z perspektywą powietrzną i dopasowane niebo - kraniec mapy znika w oddali.

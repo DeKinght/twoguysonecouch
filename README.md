@@ -105,4 +105,8 @@ i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów 
   przed cofniętymi domami czasem rośnie żywopłot.
 - Kamera zza auta (V) nie wchodzi w budynki: kula sprawdza drogę od auta do kamery, a kamera staje tuż przed
   przeszkodą (przybliża się od razu, oddala płynnie).
+- Pierścień na skraju miasta: mieszanka kamienic KayKit (różna wysokość) i budynków dzielnicy, które stoją
+  przed nim, z lekkim rozrzutem i bez powtórek sąsiadów. Panorama za murem dopasowana do dzielnicy: tuż za
+  murem prawdziwe budynki tej dzielnicy, dalej bryły o wysokościach jak w mieście (przedmieście 6-10 m,
+  przemysł 8-16 m, śródmieście 14-34 m), na przedmieściach więcej drzew.
 
