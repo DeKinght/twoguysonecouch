@@ -104,6 +104,7 @@ var _interact_action: String = ""
 var _seat_yaw: float = 0.0
 var _third_person: bool = false
 var _chase_cam: Camera3D
+var _chase_fraction: float = 1.0
 
 var _pitch: float = 0.0
 var _crouching: bool = false
@@ -699,9 +700,38 @@ func _place_chase_cam(blend: float) -> void:
 	var forward: Vector3 = vt.basis.z
 	forward.y = 0.0
 	forward = forward.normalized().rotated(Vector3.UP, _seat_yaw)
+	var pivot: Vector3 = vt.origin + Vector3.UP * 2.4  # nad dachem kabiny
 	var target: Vector3 = vt.origin - forward * chase_distance + Vector3.UP * (chase_height - _pitch * 4.0)
-	_chase_cam.global_position = _chase_cam.global_position.lerp(target, blend)
+	# Kamera nie wchodzi w ściany: kula leci od auta do celu, a kamera staje tuż przed przeszkodą.
+	# Przybliża się od razu, oddala płynnie (bez skakania przy mijaniu słupów).
+	var fraction: float = _chase_free_fraction(pivot, target)
+	if fraction < _chase_fraction:
+		_chase_fraction = fraction
+	else:
+		_chase_fraction = move_toward(_chase_fraction, fraction, get_physics_process_delta_time() * 1.2)
+	var wanted: Vector3 = pivot + (target - pivot) * _chase_fraction
+	if _chase_fraction < 0.999:
+		blend = maxf(blend, 0.5)  # przy ścianie bez opóźnienia, żeby nie przelecieć przez nią
+	_chase_cam.global_position = _chase_cam.global_position.lerp(wanted, blend)
 	_chase_cam.look_at(vt.origin + Vector3.UP * 2.0 + forward * 2.0)
+
+
+## Jaka część drogi od auta do kamery jest wolna (0..1).
+func _chase_free_fraction(from: Vector3, to: Vector3) -> float:
+	var query := PhysicsShapeQueryParameters3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.35
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, from)
+	query.motion = to - from
+	query.collision_mask = 1  # świat (budynki, ściany, płoty)
+	var exclude: Array[RID] = [get_rid(), vehicle.get_rid()]
+	for child in vehicle.get_children():
+		if child is CollisionObject3D:
+			exclude.append((child as CollisionObject3D).get_rid())
+	query.exclude = exclude
+	var result: PackedFloat32Array = get_world_3d().direct_space_state.cast_motion(query)
+	return clampf(result[0], 0.05, 1.0) if result.size() > 0 else 1.0
 
 
 ## Spadliśmy pod mapę: wracamy na swój punkt startowy poziomu (SpawnPoints).

@@ -99,3 +99,10 @@ i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów 
   Meble do noszenia nie są tym objęte.
 - `scripts/core/render_tuning.gd`: słońce z 2 warstwami cienia do 80 m i bez drobiazgów z wnętrz budynków
   (warstwa renderowania 2 - dach i tak je zasłania); lampy wygaszają się z odległości (cienie lamp bez zmian).
+- Różnorodność zabudowy: budynek nie powtarza modelu dwóch ostatnich sąsiadów z tej samej pierzei, dostaje losową
+  paletę kolorów (variation-a/b/c z paczek Kenney), skalę, cofnięcie od ulicy, przesunięcie w bok i lekki obrót
+  (najmniej w śródmieściu, najwięcej na przedmieściu). Część działek zostaje pusta (ogród / parking / plac),
+  przed cofniętymi domami czasem rośnie żywopłot.
+- Kamera zza auta (V) nie wchodzi w budynki: kula sprawdza drogę od auta do kamery, a kamera staje tuż przed
+  przeszkodą (przybliża się od razu, oddala płynnie).
+

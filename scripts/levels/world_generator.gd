@@ -62,7 +62,21 @@ const CATALOG: Dictionary = {
 			"building-j", "building-k", "building-m", "building-o", "building-p", "building-r", "building-s", "building-t"],
 		"tall": ["building-a", "building-b", "building-e", "building-f", "building-l", "building-m"]},
 }
-const PAIR_CHANCE: Dictionary = {SUBURBAN: 0.75, COMMERCIAL: 0.3, INDUSTRIAL: 0.6}
+const PAIR_CHANCE: Dictionary = {SUBURBAN: 0.55, COMMERCIAL: 0.3, INDUSTRIAL: 0.55}
+## Szansa, że działka zostanie pusta (ogród / parking / plac) - przerywa monotonne pierzeje.
+const VACANT_CHANCE: Dictionary = {SUBURBAN: 0.07, COMMERCIAL: 0.06, INDUSTRIAL: 0.1}
+## Alternatywne palety kolorów z paczek Kenney (te same modele, inne dachy i elewacje).
+const VARIATIONS: Dictionary = {
+	"suburban": ["variation-a", "variation-b", "variation-c"],
+	"commercial": ["variation-a", "variation-b"],
+	"industrial": ["variation-a", "variation-b", "variation-c"],
+}
+## [cofnięcie od ulicy: min, max udziału wolnego miejsca], przesunięcie w bok, maks. obrót [°]
+const PLACEMENT: Dictionary = {
+	SUBURBAN: [0.25, 1.0, 0.6, 4.0],
+	COMMERCIAL: [0.0, 0.25, 0.3, 1.2],
+	INDUSTRIAL: [0.1, 0.8, 0.6, 2.5],
+}
 const PAVING: Dictionary = {COMMERCIAL: Color(0.68, 0.68, 0.7), INDUSTRIAL: Color(0.5, 0.5, 0.52)}
 const HQ_CENTER: Vector2 = Vector2(10, 5)
 
@@ -91,6 +105,7 @@ var _road_mask: Dictionary = {}  ## Vector2i(moduł drogi) -> maska wylotów
 var _batches: Dictionary = {}    ## ścieżka modelu -> Array[Transform3D]
 var _collision: StaticBody3D
 var _district: Dictionary = {}   ## Vector2i(moduł) -> dzielnica
+var _recent: Dictionary = {}     ## pierzeja (ulica + strona) -> ostatnie modele [ścieżka|wariant]
 var _downtown: Vector2
 var _industry: Vector2
 var _noise: Array[FastNoiseLite] = []
@@ -463,23 +478,31 @@ func _build_blocks() -> void:
 				var d: int = _face[m]
 				var along := Vector2i(1, 0) if d in [N, S] else Vector2i(0, 1)
 				var other: Vector2i = m + along
+				if _rng.randf() < VACANT_CHANCE[district]:
+					_place_yard(m, district)  # pusta działka: ogród / parking / plac
 				# Działka na dwa moduły wzdłuż ulicy (większe domy, hale, biurowce).
-				if _rng.randf() < PAIR_CHANCE[district] and not used.has(other) \
+				elif _rng.randf() < PAIR_CHANCE[district] and not used.has(other) \
 						and _type.get(other, EMPTY) == BUILDING and _face.get(other, 0) == d \
 						and _district_of(other) == district:
 					used[other] = true
-					_place_lot((_center(m) + _center(other)) * 0.5, d, 2, district, false)
+					_place_lot((_center(m) + _center(other)) * 0.5, d, 2, district, false, _street_key(m, d))
 				else:
-					_place_lot(_center(m), d, 1, district, false)
+					_place_lot(_center(m), d, 1, district, false, _street_key(m, d))
 			BOUNDARY:
-				_place_lot(_center(m), _face[m], 1, _district_of(m), true)
+				_place_lot(_center(m), _face[m], 1, _district_of(m), true, _street_key(m, _face[m]))
 			PARK:
 				_place_yard(m, _district_of(m))
 		used[m] = true
 
 
+## Pierzeja = ulica, przy której stoi działka, i strona ulicy (żeby sąsiedzi się nie powtarzali).
+func _street_key(m: Vector2i, d: int) -> String:
+	var road: Vector2i = m + DIRS[d]
+	return "%d:%d" % [d, road.y if d in [N, S] else road.x]
+
+
 ## Budynek na działce: `width` modułów wzdłuż ulicy, front w stronę `d`.
-func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bool) -> void:
+func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bool, street: String = "") -> void:
 	var dir: Vector2i = DIRS[d]
 	var lot := Vector2(M * width - 1.2, M - 0.6)
 	if district == COMMERCIAL or district == INDUSTRIAL:
@@ -487,30 +510,49 @@ func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bo
 				PAVING[district], 0.012)
 	# Stare kamienice KayKit (z podstawą 9 x 9 m) w śródmieściu i na obrzeżu przedmieść.
 	if width == 1 and (district == COMMERCIAL and _rng.randf() < 0.3 or district == SUBURBAN and boundary):
-		var letter: String = (TALL if boundary else BUILDINGS)[_rng.randi_range(0, (TALL if boundary else BUILDINGS).size() - 1)]
+		var list: Array[String] = TALL if boundary else BUILDINGS
+		var letter: String = list[_rng.randi_range(0, list.size() - 1)]
 		_place_kaykit(center, d, letter)
 		return
-	var choice: Array = _pick_model(district, lot, boundary)
+	var choice: Array = _pick_model(district, lot, boundary, _recent.get(street, []))
 	if choice.is_empty():
 		return
 	var path: String = choice[0]
 	var s: float = choice[1]
-	var rot: float = atan2(-float(dir.x), -float(dir.y))  # front modeli Kenney = lokalne -Z
-	var basis := Basis(Vector3.UP, rot)
+	var variant: int = choice[2]
+	var recent: Array = _recent.get(street, [])
+	recent.append("%s|%d" % [path, variant])
+	_recent[street] = recent.slice(-2)
+
+	# Nie od linijki: cofnięcie od ulicy, przesunięcie w bok i lekki obrót w granicach działki.
+	var rule: Array = PLACEMENT[district]
 	var box: AABB = _model_aabb(path)
+	var size: Vector3 = box.size * s
+	var to_road := Vector3(dir.x, 0, dir.y)
+	var along := Vector3(-to_road.z, 0, to_road.x)
+	var slack_depth: float = maxf(lot.y - size.z, 0.0)
+	var slack_side: float = maxf(lot.x - size.x, 0.0)
+	var setback: float = slack_depth * _rng.randf_range(rule[0], rule[1])
+	if boundary:
+		setback = 0.0
+	var place: Vector3 = center + to_road * (slack_depth * 0.5 - setback) \
+			+ along * slack_side * 0.5 * rule[2] * _rng.randf_range(-1.0, 1.0)
+	var yaw: float = deg_to_rad(rule[3]) * _rng.randf_range(-1.0, 1.0)
+	var rot: float = atan2(-float(dir.x), -float(dir.y)) + yaw  # front modeli Kenney = lokalne -Z
+	var basis := Basis(Vector3.UP, rot)
 	var c := box.get_center()
-	var pos: Vector3 = center - basis * Vector3(c.x * s, 0.0, c.z * s) + Vector3(0, 0.012, 0)
-	var depth: float = box.size.z * s
-	_add(path, Transform3D(basis.scaled(Vector3.ONE * s), pos))
-	_box_collider(center + Vector3(0, box.size.y * s * 0.5, 0), box.size * s, rot)
-	if district == INDUSTRIAL and (boundary or _rng.randf() < 0.35):
+	var pos: Vector3 = place - basis * Vector3(c.x * s, 0.0, c.z * s) + Vector3(0, 0.012, 0)
+	_add(path, Transform3D(basis.scaled(Vector3.ONE * s), pos), variant)
+	_box_collider(place + Vector3(0, size.y * 0.5, 0), size, rot)
+	if district == INDUSTRIAL and (boundary or _rng.randf() < 0.3):
 		# Komin za halą - charakterystyczna sylwetka dzielnicy przemysłowej.
-		var back: Vector3 = center + Vector3(-dir.x, 0, -dir.y) * (lot.y * 0.5 - 1.2) + basis * Vector3(lot.x * 0.3 * (1 if _rng.randf() < 0.5 else -1), 0, 0)
+		var back: Vector3 = center - to_road * (lot.y * 0.5 - 1.2) + along * lot.x * 0.3 * (1 if _rng.randf() < 0.5 else -1)
 		var ch: String = IND % ["chimney-medium", "chimney-basic", "chimney-small"][_rng.randi_range(0, 2)]
-		_add(ch, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 7.0), back))
+		var hs: float = _rng.randf_range(5.5, 8.0)
+		_add(ch, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * hs), back), _rng.randi_range(0, 3))
 		_box_collider(back + Vector3(0, 4, 0), Vector3(1.5, 8, 1.5), 0.0)
 	if district == SUBURBAN and not boundary:
-		_suburban_garden(center, d, lot, depth)
+		_suburban_garden(center, d, lot, setback)
 
 
 func _place_kaykit(center: Vector3, d: int, letter: String) -> void:
@@ -525,23 +567,45 @@ func _place_kaykit(center: Vector3, d: int, letter: String) -> void:
 
 ## Losuje model danej dzielnicy, który zmieści się na działce w rozsądnej skali.
 ## Zwraca [ścieżka, skala] albo [].
-func _pick_model(district: int, lot: Vector2, boundary: bool) -> Array:
+func _pick_model(district: int, lot: Vector2, boundary: bool, avoid: Array = []) -> Array:
 	var spec: Dictionary = CATALOG[district]
 	var names: Array = spec["tall"] if boundary and spec.has("tall") else spec["models"]
 	var options: Array = []
 	for n: String in names:
 		var path: String = spec["path"] % n
 		var size: Vector3 = _model_aabb(path).size
-		var s: float = minf(spec["max_scale"], minf(lot.x / size.x, lot.y / size.z))
-		if s >= spec["min_scale"]:
-			options.append([path, s])
+		var fit: float = minf(spec["max_scale"], minf(lot.x / size.x, lot.y / size.z))
+		if fit >= spec["min_scale"] * 0.85:
+			options.append([path, fit])
 	if options.is_empty():
 		return []
-	return options[_rng.randi_range(0, options.size() - 1)]
+	var kit: String = _kit_of(options[0][0])
+	var variants: int = 1 + (VARIATIONS[kit] as Array).size() if VARIATIONS.has(kit) else 1
+	# Kilka prób, żeby nie powtórzyć modelu ani koloru dwóch ostatnich sąsiadów z pierzei.
+	for attempt in 6:
+		var pick: Array = options[_rng.randi_range(0, options.size() - 1)]
+		var variant: int = _rng.randi_range(0, variants - 1)
+		var same_model: bool = false
+		for a: String in avoid:
+			if a.begins_with(pick[0] + "|"):
+				same_model = true
+		if same_model and attempt < 5:
+			continue
+		var fit: float = pick[1]
+		var scale: float = _rng.randf_range(maxf(spec["min_scale"] * 0.85, fit * 0.82), fit)
+		return [pick[0], scale, variant]
+	return []
+
+
+func _kit_of(path: String) -> String:
+	for kit: String in VARIATIONS:
+		if path.contains("/" + kit + "/"):
+			return kit
+	return ""
 
 
 ## Ogródek przed i za domem: płotek, drzewka, donice, ścieżka do drzwi.
-func _suburban_garden(center: Vector3, d: int, lot: Vector2, house_depth: float) -> void:
+func _suburban_garden(center: Vector3, d: int, lot: Vector2, setback: float) -> void:
 	var dir: Vector2i = DIRS[d]
 	var to_road := Vector3(dir.x, 0, dir.y)
 	var along := Vector3(-to_road.z, 0, to_road.x)
@@ -553,6 +617,15 @@ func _suburban_garden(center: Vector3, d: int, lot: Vector2, house_depth: float)
 	if _rng.randf() < 0.5:
 		var p2: Vector3 = center - along * (lot.x * 0.5 - 1.2) * (1 if _rng.randf() < 0.5 else -1) + to_road * (lot.y * 0.5 - 0.5)
 		_add(SUB % "planter", Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * 4.0), p2))
+	if setback > 1.6 and _rng.randf() < 0.35:
+		# Niski żywopłot wzdłuż chodnika z przerwą na wejście (bez kolizji - to tylko krzaki).
+		var n: int = int(lot.x / 0.9)
+		for k in n:
+			var t: float = (k + 0.5) / n - 0.5
+			if absf(t) < 0.12:
+				continue
+			var p3: Vector3 = center + to_road * (lot.y * 0.5 - 0.3) + along * t * lot.x
+			_add(NATURE % "Bush_2_A_Color1", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(1.6, 2.0)), p3))
 
 
 ## Wnętrze kwartału zależnie od dzielnicy.
@@ -843,11 +916,11 @@ const FADE_RULES: Array = [
 ]
 
 
-func _add(path: String, t: Transform3D) -> void:
+func _add(path: String, t: Transform3D, variant: int = 0) -> void:
 	var p: Vector3 = t.origin
 	var backdrop: bool = not _city_rect().grow(2.0).has_point(Vector2(p.x, p.z))
 	var size: float = BACKDROP_CHUNK if backdrop else CHUNK
-	var key := "%s|%d|%d|%d" % [path, int(backdrop), floori(p.x / size), floori(p.z / size)]
+	var key := "%s|%d|%d|%d|%d" % [path, int(backdrop), floori(p.x / size), floori(p.z / size), variant]
 	if not _batches.has(key):
 		_batches[key] = []
 	(_batches[key] as Array).append(t)
@@ -867,6 +940,7 @@ func _flush_batches() -> void:
 		var parts: PackedStringArray = key.split("|")
 		var path: String = parts[0]
 		var backdrop: bool = parts[1] == "1"
+		var variant: int = int(parts[4])
 		if not models.has(path):
 			if not ResourceLoader.exists(path):
 				push_warning("WorldGenerator: brak modelu %s" % path)
@@ -891,6 +965,10 @@ func _flush_batches() -> void:
 			mmi.multimesh = mm
 			if entry[2] != null:
 				mmi.material_override = entry[2]
+			if variant > 0:
+				var vm: Material = _variant_material(path, entry[0], variant)
+				if vm != null:
+					mmi.material_override = vm
 			if path.contains("low-detail"):
 				mmi.material_override = _haze_material()  # dalekie miasto: matowe, w kolorze mgły
 			if backdrop:
@@ -901,6 +979,29 @@ func _flush_batches() -> void:
 				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			add_child(mmi)
 	_batches.clear()
+
+
+var _variant_mats: Dictionary = {}
+
+
+## Materiał modelu z podmienioną paletą (variation-a/b/c z paczki Kenney).
+func _variant_material(path: String, mesh: Mesh, variant: int) -> Material:
+	var kit: String = _kit_of(path)
+	if kit == "" or mesh == null or mesh.get_surface_count() == 0:
+		return null
+	var list: Array = VARIATIONS[kit]
+	var tex_path: String = "res://assets/models/%s/Variations/%s.png" % [kit, list[(variant - 1) % list.size()]]
+	var key: String = "%s|%d|%s" % [kit, variant, str(mesh.surface_get_material(0).get_instance_id()) if mesh.surface_get_material(0) else "-"]
+	if _variant_mats.has(key):
+		return _variant_mats[key]
+	var base := mesh.surface_get_material(0) as BaseMaterial3D
+	if base == null or not ResourceLoader.exists(tex_path):
+		_variant_mats[key] = null
+		return null
+	var mat := base.duplicate() as BaseMaterial3D
+	mat.albedo_texture = load(tex_path)
+	_variant_mats[key] = mat
+	return mat
 
 
 func _fade_rule(path: String) -> Array:
