@@ -41,6 +41,9 @@ var _noise := FastNoiseLite.new()
 var _rng: RandomNumberGenerator
 var _port_count: int = 0
 var _tree_mesh: Array[Mesh] = []
+## Odcinki portu jako zakresy kątów od środka miasta: [kąt środka, połowa rozpiętości].
+## Z nich rośnie wachlarz otwartego morza (szerszy im dalej od miasta).
+var _sea_arcs: Array = []
 
 
 func _init(generator: WorldGenerator) -> void:
@@ -60,6 +63,7 @@ func prepare() -> void:
 	var smooth: Array[int] = _smooth_runs(raw)
 	for i in ring.size():
 		types[ring[i]] = smooth[i]
+	_build_sea_arcs(smooth)
 	_choose_stubs()
 
 
@@ -153,6 +157,35 @@ func _runs(t: Array[int]) -> Array:
 		i = (i + len) % n
 		count += len
 	return out
+
+
+func _build_sea_arcs(t: Array[int]) -> void:
+	var c: Vector2 = rect.get_center()
+	for run: Array in _runs(t):
+		if run[2] != PORT:
+			continue
+		var mid_m: Vector2i = ring[(run[0] + run[1] / 2) % ring.size()]
+		var mid: float = (gen._center2(mid_m) - c).angle()
+		var half: float = 0.0
+		for k in run[1]:
+			var a: float = (gen._center2(ring[(run[0] + k) % ring.size()]) - c).angle()
+			half = maxf(half, absf(angle_difference(mid, a)))
+		_sea_arcs.append([mid, half])
+
+
+## 0..1: na ile punkt leży na otwartym morzu przed portem. Wachlarz zaczyna się dokładnie
+## na szerokości nabrzeża i rozszerza o 45° w każdą stronę ku horyzontowi.
+func _sea(p: Vector2, d: float) -> float:
+	if _sea_arcs.is_empty():
+		return 0.0
+	var ang: float = (p - rect.get_center()).angle()
+	var best: float = 0.0
+	for arc: Array in _sea_arcs:
+		var diff: float = absf(angle_difference(ang, arc[0]))
+		var width: float = arc[1] + deg_to_rad(45.0) * smoothstep(20.0, 420.0, d)
+		var margin: float = deg_to_rad(4.0) + deg_to_rad(6.0) * smoothstep(0.0, 300.0, d)
+		best = maxf(best, 1.0 - smoothstep(width - margin, width + margin, diff))
+	return best * smoothstep(12.0, 50.0, d)  # przy samej krawędzi decyduje moduł (nabrzeże)
 
 
 func _outward_dirs(m: Vector2i) -> Array[int]:
@@ -691,8 +724,9 @@ func _out_dist(p: Vector2) -> float:
 func _weights(p: Vector2) -> Vector3:
 	var q := Vector2(clampf(p.x, rect.position.x, rect.end.x), clampf(p.y, rect.position.y, rect.end.y))
 	var d: float = p.distance_to(q)
+	var sea: float = _sea(p, d)
 	if d >= 760.0:
-		return Vector3(0, 0, 1)  # daleko wszystko to wzgórza - bez liczenia
+		return _with_sea(Vector3(0, 0, 1), sea)  # daleko ląd to wzgórza - bez liczenia
 	var tangent := Vector2(0, 1) if (q.x <= rect.position.x + 0.01 or q.x >= rect.end.x - 0.01) else Vector2(1, 0)
 	var spread: float = clampf(d / 45.0, 0.02, 1.0) * WorldGenerator.M * 2.5
 	var w := Vector3.ZERO
@@ -713,8 +747,19 @@ func _weights(p: Vector2) -> Vector3:
 			_:
 				w.z += 1.0
 	w /= 5.0
-	# Daleko od miasta wszystko przechodzi we wzgórza - miasto leży w dolinie.
-	return w.lerp(Vector3(0, 0, 1), smoothstep(380.0, 760.0, d))
+	# Daleko od miasta ląd przechodzi we wzgórza (dolina), ale przed portem zostaje otwarte morze.
+	return _with_sea(w.lerp(Vector3(0, 0, 1), smoothstep(380.0, 760.0, d)), sea)
+
+
+func _with_sea(w: Vector3, sea: float) -> Vector3:
+	if sea <= w.x:
+		return w
+	var rest: float = w.y + w.z
+	if rest > 0.0001:
+		w.y *= (1.0 - sea) / rest
+		w.z *= (1.0 - sea) / rest
+	w.x = sea
+	return w
 
 
 func _height(p: Vector2) -> float:
@@ -726,13 +771,11 @@ func _height(p: Vector2) -> float:
 	var n2: float = _noise.get_noise_2d(p.x * 2.7 + 311.0, p.y * 2.7 - 97.0)
 	var hills: float = smoothstep(3.0, 140.0, d) * (26.0 + 20.0 * n1) + smoothstep(140.0, 620.0, d) * (34.0 + 22.0 * n2) \
 			+ n2 * 2.0 * smoothstep(3.0, 40.0, d)
-	var shore: float = 240.0 + 70.0 * n1
-	var far_shore: float = 3.0 + smoothstep(shore, shore + 320.0, d) * (40.0 + 20.0 * n2)
-	var port: float = lerpf(SEABED, far_shore, smoothstep(shore, shore + 60.0, d))
+	var port: float = SEABED - smoothstep(20.0, 400.0, d) * 6.0  # otwarte morze, coraz głębiej
 	var hwy: float = smoothstep(70.0, 460.0, d) * (26.0 + 16.0 * n1)
 	# Pasmo gór na horyzoncie zamyka widok (kraniec terenu ginie za grzbietem we mgle).
 	var ridge: float = smoothstep(750.0, 1350.0, d) * (95.0 + 45.0 * n2)
-	return w.x * port + w.y * hwy + w.z * hills + ridge
+	return w.x * port + w.y * hwy + w.z * hills + ridge * (1.0 - w.x)
 
 
 func _terrain_color(h: float, slope: float, p: Vector2, port_w: float) -> Color:
@@ -848,7 +891,7 @@ func _build_water() -> void:
 	if not has_port:
 		return
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(3600, 3600)
+	plane.size = Vector2(6000, 6000)  # morze aż po horyzont
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://shaders/water.gdshader")
 	for k in 2:
