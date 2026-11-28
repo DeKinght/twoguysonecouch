@@ -101,6 +101,7 @@ func _ready() -> void:
 	_build_decor()
 	_build_posters()
 	_build_items()
+	_tune_rendering()
 	super()
 	if multiplayer.is_server():
 		_schedule_flicker()
@@ -263,6 +264,14 @@ func _build_office() -> void:
 
 
 var world: WorldGenerator
+
+
+## Cienie bez marnowania: patrz RenderTuning.
+func _tune_rendering() -> void:
+	RenderTuning.tune_sun(get_node_or_null("Sun") as DirectionalLight3D)
+	for light in find_children("*", "OmniLight3D", true, false):
+		RenderTuning.tune_lamp(light)
+	RenderTuning.mark_interior(self, AABB(Vector3(0.15, -0.2, 0.15), Vector3(W - 0.3, WALL_H, D - 0.3)))
 
 
 func _on_job_state(pc: JobComputer) -> void:

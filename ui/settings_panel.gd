@@ -6,6 +6,7 @@ extends VBoxContainer
 var _sens_slider: HSlider
 var _sens_value: Label
 var _volume_slider: HSlider
+var _fps_option: OptionButton
 var _volume_value: Label
 var _bind_buttons: Dictionary = {}  ## akcja -> Button
 var _listening: String = ""
@@ -75,6 +76,26 @@ func _ready() -> void:
 	_sens_slider.scrollable = false  # kółko myszy przewija listę, a nie zmienia czułości
 	_sens_slider.value_changed.connect(_on_sensitivity_changed)
 	add_child(_sens_slider)
+
+	# --- Grafika ---
+	var fps_row := HBoxContainer.new()
+	add_child(fps_row)
+	var fps_label := Label.new()
+	fps_label.text = "Limit klatek"
+	fps_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fps_label.tooltip_text = "Mniej klatek = chłodniejszy i cichszy komputer. F3 pokazuje licznik FPS."
+	fps_row.add_child(fps_label)
+	_fps_option = OptionButton.new()
+	_fps_option.custom_minimum_size = Vector2(180, 0)
+	for value: int in Settings.FPS_OPTIONS:
+		_fps_option.add_item(Settings.fps_text(value))
+	_fps_option.selected = maxi(0, Settings.FPS_OPTIONS.find(Settings.max_fps))
+	_fps_option.item_selected.connect(func(i: int) -> void: Settings.set_max_fps(Settings.FPS_OPTIONS[i]))
+	fps_row.add_child(_fps_option)
+	var fps_hint := Label.new()
+	fps_hint.text = "F3 w grze: licznik FPS"
+	fps_hint.theme_type_variation = "MutedLabel"
+	add_child(fps_hint)
 
 	add_child(HSeparator.new())
 
@@ -171,6 +192,8 @@ func _on_sensitivity_changed(value: float) -> void:
 
 func _refresh() -> void:
 	_sens_value.text = "%.2f×" % Settings.sensitivity_mult
+	if _fps_option != null:
+		_fps_option.selected = maxi(0, Settings.FPS_OPTIONS.find(Settings.max_fps))
 	_volume_value.text = "Wyciszone" if Settings.master_volume <= 0.001 \
 			else "%d%%" % roundi(Settings.master_volume * 100.0)
 	for action: String in _bind_buttons:

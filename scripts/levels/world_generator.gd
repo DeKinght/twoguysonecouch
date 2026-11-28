@@ -828,40 +828,86 @@ func _rotation_for(base: int, mask: int) -> float:
 	return 0.0
 
 
+## Modele grupujemy w kwadraty (CHUNK m), a nie w jedną paczkę na całe miasto: Godot pomija
+## wtedy kwadraty poza kadrem i poza zasięgiem każdej warstwy cienia, a dla dalekich kwadratów
+## sam używa uproszczonych siatek (LOD generowane przy imporcie modeli).
+const CHUNK: float = 72.0            ## miasto (8 x 8 modułów)
+const BACKDROP_CHUNK: float = 150.0  ## daleka panorama za murem
+## Drobiazgi znikają z odległości płynnie (dithering) - w tle i tak ich nie widać, a są w mgle.
+## [fragment ścieżki, koniec zasięgu, szerokość przejścia]
+const FADE_RULES: Array = [
+	["bench", 110.0, 30.0], ["firehydrant", 90.0, 25.0], ["trash_", 90.0, 25.0], ["planter", 110.0, 30.0],
+	["detail-parasol", 120.0, 30.0], ["Bush_", 130.0, 30.0], ["dumpster", 130.0, 30.0],
+	["car_", 170.0, 40.0], ["shipping-container", 190.0, 40.0], ["streetlight", 170.0, 40.0],
+	["solar-panel", 170.0, 40.0],
+]
+
+
 func _add(path: String, t: Transform3D) -> void:
-	if not _batches.has(path):
-		_batches[path] = []
-	(_batches[path] as Array).append(t)
+	var p: Vector3 = t.origin
+	var backdrop: bool = not _city_rect().grow(2.0).has_point(Vector2(p.x, p.z))
+	var size: float = BACKDROP_CHUNK if backdrop else CHUNK
+	var key := "%s|%d|%d|%d" % [path, int(backdrop), floori(p.x / size), floori(p.z / size)]
+	if not _batches.has(key):
+		_batches[key] = []
+	(_batches[key] as Array).append(t)
 
 
-## Jeden MultiMeshInstance3D na każdą siatkę modelu - tysiące budynków bez tysięcy węzłów.
+func _city_rect() -> Rect2:
+	var lo: Vector2 = _center2(Vector2i(_amin, _bmin)) - Vector2(M, M) * 0.5
+	var hi: Vector2 = _center2(Vector2i(_amax, _bmax)) + Vector2(M, M) * 0.5
+	return Rect2(lo, hi - lo)
+
+
 func _flush_batches() -> void:
-	var paths: Array = _batches.keys()
-	paths.sort()
-	for path: String in paths:
-		if not ResourceLoader.exists(path):
-			push_warning("WorldGenerator: brak modelu %s" % path)
-			continue
-		var model: Node3D = (load(path) as PackedScene).instantiate()
-		var transforms: Array = _batches[path]
-		for mi: MeshInstance3D in _meshes(model):
-			var local: Transform3D = _relative(mi, model)
+	var keys: Array = _batches.keys()
+	keys.sort()
+	var models: Dictionary = {}  ## ścieżka -> [[siatka, transform lokalny, materiał], ...]
+	for key: String in keys:
+		var parts: PackedStringArray = key.split("|")
+		var path: String = parts[0]
+		var backdrop: bool = parts[1] == "1"
+		if not models.has(path):
+			if not ResourceLoader.exists(path):
+				push_warning("WorldGenerator: brak modelu %s" % path)
+				models[path] = []
+			else:
+				var model: Node3D = (load(path) as PackedScene).instantiate()
+				var list: Array = []
+				for mi: MeshInstance3D in _meshes(model):
+					list.append([mi.mesh, _relative(mi, model), mi.material_override])
+				model.free()
+				models[path] = list
+		var transforms: Array = _batches[key]
+		var fade: Array = _fade_rule(path)
+		for entry: Array in models[path]:
 			var mm := MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.mesh = mi.mesh
+			mm.mesh = entry[0]
 			mm.instance_count = transforms.size()
 			for k in transforms.size():
-				mm.set_instance_transform(k, (transforms[k] as Transform3D) * local)
+				mm.set_instance_transform(k, (transforms[k] as Transform3D) * (entry[1] as Transform3D))
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
-			if mi.material_override != null:
-				mmi.material_override = mi.material_override
+			if entry[2] != null:
+				mmi.material_override = entry[2]
 			if path.contains("low-detail"):
 				mmi.material_override = _haze_material()  # dalekie miasto: matowe, w kolorze mgły
-				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if backdrop:
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF  # za mgłą cienie są zbędne
+			elif not fade.is_empty():
+				mmi.visibility_range_end = fade[1]
+				mmi.visibility_range_end_margin = fade[2]
+				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			add_child(mmi)
-		model.free()
 	_batches.clear()
+
+
+func _fade_rule(path: String) -> Array:
+	for rule: Array in FADE_RULES:
+		if path.contains(rule[0]):
+			return rule
+	return []
 
 
 var _haze_mat: StandardMaterial3D
