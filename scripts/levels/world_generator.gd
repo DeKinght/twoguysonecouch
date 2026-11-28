@@ -39,6 +39,33 @@ const S: int = 4
 const W: int = 8
 const DIRS: Dictionary = {N: Vector2i(0, -1), E: Vector2i(1, 0), S: Vector2i(0, 1), W: Vector2i(-1, 0)}
 
+const SUB: String = "res://assets/models/suburban/%s.glb"
+const COM: String = "res://assets/models/commercial/%s.glb"
+const IND: String = "res://assets/models/industrial/%s.glb"
+
+## Dzielnice. Każdy moduł dostaje ocenę dla każdej z nich (odległość od "centrum" dzielnicy
+## + płynny szum) i wygrywa najlepsza - granice są nieregularne, a w pasie przejściowym
+## budynki obu dzielnic mieszają się (drobny szum na poziomie modułu).
+enum { SUBURBAN, COMMERCIAL, INDUSTRIAL }
+const CATALOG: Dictionary = {
+	SUBURBAN: {"path": SUB, "min_scale": 6.0, "max_scale": 8.5,
+		"models": ["building-type-a", "building-type-b", "building-type-c", "building-type-d", "building-type-e",
+			"building-type-g", "building-type-h", "building-type-i", "building-type-j", "building-type-k", "building-type-l",
+			"building-type-o", "building-type-p", "building-type-q", "building-type-r", "building-type-s", "building-type-u"]},
+	COMMERCIAL: {"path": COM, "min_scale": 6.0, "max_scale": 9.5,
+		"models": ["building-a", "building-b", "building-c", "building-d", "building-e", "building-f", "building-g",
+			"building-h", "building-i", "building-j", "building-k", "building-l", "building-m", "building-skyscraper-a",
+			"building-skyscraper-b", "building-skyscraper-c", "building-skyscraper-e"],
+		"tall": ["building-m", "building-skyscraper-b", "building-skyscraper-c", "building-skyscraper-d", "building-skyscraper-e"]},
+	INDUSTRIAL: {"path": IND, "min_scale": 4.8, "max_scale": 7.5,
+		"models": ["building-a", "building-b", "building-d", "building-e", "building-g", "building-h", "building-i",
+			"building-j", "building-k", "building-m", "building-o", "building-p", "building-r", "building-s", "building-t"],
+		"tall": ["building-a", "building-b", "building-e", "building-f", "building-l", "building-m"]},
+}
+const PAIR_CHANCE: Dictionary = {SUBURBAN: 0.75, COMMERCIAL: 0.3, INDUSTRIAL: 0.6}
+const PAVING: Dictionary = {COMMERCIAL: Color(0.68, 0.68, 0.7), INDUSTRIAL: Color(0.5, 0.5, 0.52)}
+const HQ_CENTER: Vector2 = Vector2(10, 5)
+
 const BUILDINGS: Array[String] = ["A", "B", "C", "D", "E", "F", "G", "H"]
 const TALL: Array[String] = ["C", "D", "G", "H"]
 const TREES: Array[String] = ["Tree_1_A_Color1", "Tree_1_B_Color1", "Tree_2_A_Color1", "Tree_2_B_Color1",
@@ -63,6 +90,10 @@ var _face: Dictionary = {} ## Vector2i(moduł) -> kierunek do ulicy (N/E/S/W)
 var _road_mask: Dictionary = {}  ## Vector2i(moduł drogi) -> maska wylotów
 var _batches: Dictionary = {}    ## ścieżka modelu -> Array[Transform3D]
 var _collision: StaticBody3D
+var _district: Dictionary = {}   ## Vector2i(moduł) -> dzielnica
+var _downtown: Vector2
+var _industry: Vector2
+var _noise: Array[FastNoiseLite] = []
 var _amin: int
 var _amax: int
 var _bmin: int
@@ -83,6 +114,7 @@ func generate(seed: int) -> void:
 	_prune_edges()
 	_mark_roads()
 	_mark_blocks()
+	_setup_districts()
 	_pick_target()
 
 	_build_ground()
@@ -90,7 +122,9 @@ func generate(seed: int) -> void:
 	_build_blocks()
 	_build_hq_fence()
 	_build_bounds()
+	_build_backdrop()
 	_flush_batches()
+	_apply_atmosphere()
 	generated.emit()
 
 
@@ -236,6 +270,38 @@ func _mark_blocks() -> void:
 				_type[m] = PARK
 
 
+func _setup_districts() -> void:
+	var a: float = _rng.randf() * TAU
+	_downtown = HQ_CENTER + Vector2.from_angle(a) * _rng.randf_range(70.0, 140.0)
+	_industry = HQ_CENTER + Vector2.from_angle(a + PI + _rng.randf_range(-0.9, 0.9)) * _rng.randf_range(160.0, 220.0)
+	for k in 4:
+		var n := FastNoiseLite.new()
+		n.seed = _rng.randi()
+		n.frequency = 0.012 if k < 3 else 0.08  # 3 płynne pola + drobny szum przejść
+		_noise.append(n)
+
+
+func _district_of(m: Vector2i) -> int:
+	if _district.has(m):
+		return _district[m]
+	var p: Vector2 = _center2(m)
+	var scores: Array[float] = [
+		0.55 + _noise[0].get_noise_2dv(p) * 0.3,
+		1.25 * exp(-pow(p.distance_to(_downtown) / 150.0, 2.0)) + _noise[1].get_noise_2dv(p) * 0.3,
+		1.2 * exp(-pow(p.distance_to(_industry) / 125.0, 2.0)) + _noise[2].get_noise_2dv(p) * 0.3,
+	]
+	# Pas przejściowy: drobny szum przemiesza budynki dwóch dzielnic na ich styku.
+	var fine: float = _noise[3].get_noise_2dv(p) * 0.12
+	scores[COMMERCIAL] += fine
+	scores[INDUSTRIAL] -= fine
+	var best: int = SUBURBAN
+	for k in 3:
+		if scores[k] > scores[best]:
+			best = k
+	_district[m] = best
+	return best
+
+
 func _inward(m: Vector2i) -> int:
 	if m.x < _xl[0]:
 		return E
@@ -260,10 +326,11 @@ func _center(m: Vector2i) -> Vector3:
 	return Vector3(c.x, 0.0, c.y)
 
 
-## Dom docelowy: dwa sąsiednie moduły przy tej samej ulicy (dom + podwórko), daleko od Siedziby.
+## Dom docelowy: dwa sąsiednie moduły przy tej samej ulicy, daleko od Siedziby,
+## najchętniej na przedmieściu (to dom jednorodzinny).
 func _pick_target() -> void:
-	var options: Array[Vector2i] = []
-	var hq_center := Vector2(10, 5)
+	var suburban: Array[Vector2i] = []
+	var any: Array[Vector2i] = []
 	var keys: Array = _type.keys()
 	keys.sort()
 	for m: Vector2i in keys:
@@ -273,9 +340,12 @@ func _pick_target() -> void:
 		var other: Vector2i = m + (Vector2i(1, 0) if d in [N, S] else Vector2i(0, 1))  # sąsiad wzdłuż ulicy
 		if _type.get(other, EMPTY) != BUILDING or _face.get(other, 0) != d:
 			continue
-		if _center2(m).distance_to(hq_center) < 110.0:
+		if _center2(m).distance_to(HQ_CENTER) < 110.0:
 			continue
-		options.append(m)
+		any.append(m)
+		if _district_of(m) == SUBURBAN and _district_of(other) == SUBURBAN:
+			suburban.append(m)
+	var options: Array[Vector2i] = suburban if not suburban.is_empty() else any
 	if options.is_empty():
 		push_warning("WorldGenerator: brak miejsca na dom docelowy")
 		return
@@ -285,15 +355,14 @@ func _pick_target() -> void:
 	_type[m] = TARGET
 	_type[other] = TARGET
 	_face[other] = d
-	# Dom stoi na pierwszym module, podwórko (miejsce na auto) na drugim.
-	_build_target_house(m, other, d)
+	_build_target_house((_center(m) + _center(other)) * 0.5, d)
 
 
 # --- 4. Budowa ---------------------------------------------------------------------------
 
 func _build_ground() -> void:
-	var lo: Vector2 = _center2(Vector2i(_amin - 3, _bmin - 3))
-	var hi: Vector2 = _center2(Vector2i(_amax + 3, _bmax + 3))
+	var lo: Vector2 = HQ_CENTER - Vector2(1600, 1600)  # aż po horyzont (we mgle)
+	var hi: Vector2 = HQ_CENTER + Vector2(1600, 1600)
 	var size := Vector3(hi.x - lo.x, 1.0, hi.y - lo.y)
 	var center := Vector3((lo.x + hi.x) * 0.5, -0.5, (lo.y + hi.y) * 0.5)
 	var shape := CollisionShape3D.new()
@@ -382,33 +451,152 @@ func _near_hq_entrance(p: Vector3) -> bool:
 
 
 func _build_blocks() -> void:
+	var used: Dictionary = {}
 	var keys: Array = _type.keys()
 	keys.sort()
 	for m: Vector2i in keys:
+		if used.has(m):
+			continue
 		match _type[m]:
 			BUILDING:
-				_place_building(m, BUILDINGS[_rng.randi_range(0, BUILDINGS.size() - 1)])
+				var district: int = _district_of(m)
+				var d: int = _face[m]
+				var along := Vector2i(1, 0) if d in [N, S] else Vector2i(0, 1)
+				var other: Vector2i = m + along
+				# Działka na dwa moduły wzdłuż ulicy (większe domy, hale, biurowce).
+				if _rng.randf() < PAIR_CHANCE[district] and not used.has(other) \
+						and _type.get(other, EMPTY) == BUILDING and _face.get(other, 0) == d \
+						and _district_of(other) == district:
+					used[other] = true
+					_place_lot((_center(m) + _center(other)) * 0.5, d, 2, district, false)
+				else:
+					_place_lot(_center(m), d, 1, district, false)
 			BOUNDARY:
-				_place_building(m, TALL[_rng.randi_range(0, TALL.size() - 1)])
+				_place_lot(_center(m), _face[m], 1, _district_of(m), true)
 			PARK:
-				_place_park(m)
+				_place_yard(m, _district_of(m))
+		used[m] = true
 
 
-func _place_building(m: Vector2i, letter: String) -> void:
-	var d: int = _face.get(m, S)
+## Budynek na działce: `width` modułów wzdłuż ulicy, front w stronę `d`.
+func _place_lot(center: Vector3, d: int, width: int, district: int, boundary: bool) -> void:
 	var dir: Vector2i = DIRS[d]
-	var rot: float = atan2(float(dir.x), float(dir.y))  # front budynku = lokalne +Z
+	var lot := Vector2(M * width - 1.2, M - 0.6)
+	if district == COMMERCIAL or district == INDUSTRIAL:
+		_flat_box(center, Vector2(M * width, M) if d in [N, S] else Vector2(M, M * width),
+				PAVING[district], 0.012)
+	# Stare kamienice KayKit (z podstawą 9 x 9 m) w śródmieściu i na obrzeżu przedmieść.
+	if width == 1 and (district == COMMERCIAL and _rng.randf() < 0.3 or district == SUBURBAN and boundary):
+		var letter: String = (TALL if boundary else BUILDINGS)[_rng.randi_range(0, (TALL if boundary else BUILDINGS).size() - 1)]
+		_place_kaykit(center, d, letter)
+		return
+	var choice: Array = _pick_model(district, lot, boundary)
+	if choice.is_empty():
+		return
+	var path: String = choice[0]
+	var s: float = choice[1]
+	var rot: float = atan2(-float(dir.x), -float(dir.y))  # front modeli Kenney = lokalne -Z
 	var basis := Basis(Vector3.UP, rot)
-	var pos: Vector3 = _center(m) + Vector3(0, -BASE_SINK + 0.006, 0)
-	_add(CITY % ("building_" + letter), Transform3D(basis.scaled(Vector3.ONE * S_CITY), pos))
+	var box: AABB = _model_aabb(path)
+	var c := box.get_center()
+	var pos: Vector3 = center - basis * Vector3(c.x * s, 0.0, c.z * s) + Vector3(0, 0.012, 0)
+	var depth: float = box.size.z * s
+	_add(path, Transform3D(basis.scaled(Vector3.ONE * s), pos))
+	_box_collider(center + Vector3(0, box.size.y * s * 0.5, 0), box.size * s, rot)
+	if district == INDUSTRIAL and (boundary or _rng.randf() < 0.35):
+		# Komin za halą - charakterystyczna sylwetka dzielnicy przemysłowej.
+		var back: Vector3 = center + Vector3(-dir.x, 0, -dir.y) * (lot.y * 0.5 - 1.2) + basis * Vector3(lot.x * 0.3 * (1 if _rng.randf() < 0.5 else -1), 0, 0)
+		var ch: String = IND % ["chimney-medium", "chimney-basic", "chimney-small"][_rng.randi_range(0, 2)]
+		_add(ch, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 7.0), back))
+		_box_collider(back + Vector3(0, 4, 0), Vector3(1.5, 8, 1.5), 0.0)
+	if district == SUBURBAN and not boundary:
+		_suburban_garden(center, d, lot, depth)
+
+
+func _place_kaykit(center: Vector3, d: int, letter: String) -> void:
+	var dir: Vector2i = DIRS[d]
+	var rot: float = atan2(float(dir.x), float(dir.y))  # front KayKit = lokalne +Z
+	var basis := Basis(Vector3.UP, rot)
+	_add(CITY % ("building_" + letter), Transform3D(basis.scaled(Vector3.ONE * S_CITY), center + Vector3(0, -BASE_SINK + 0.006, 0)))
 	var box: AABB = _model_aabb(CITY % ("building_" + letter + "_withoutBase"))
-	var size := box.size * S_CITY
-	var local_center := box.get_center() * S_CITY
-	_box_collider(_center(m) + basis * Vector3(local_center.x, 0, local_center.z) + Vector3(0, size.y * 0.5, 0),
-			size, rot)
+	var lc := box.get_center() * S_CITY
+	_box_collider(center + basis * Vector3(lc.x, 0, lc.z) + Vector3(0, box.size.y * S_CITY * 0.5, 0), box.size * S_CITY, rot)
+
+
+## Losuje model danej dzielnicy, który zmieści się na działce w rozsądnej skali.
+## Zwraca [ścieżka, skala] albo [].
+func _pick_model(district: int, lot: Vector2, boundary: bool) -> Array:
+	var spec: Dictionary = CATALOG[district]
+	var names: Array = spec["tall"] if boundary and spec.has("tall") else spec["models"]
+	var options: Array = []
+	for n: String in names:
+		var path: String = spec["path"] % n
+		var size: Vector3 = _model_aabb(path).size
+		var s: float = minf(spec["max_scale"], minf(lot.x / size.x, lot.y / size.z))
+		if s >= spec["min_scale"]:
+			options.append([path, s])
+	if options.is_empty():
+		return []
+	return options[_rng.randi_range(0, options.size() - 1)]
+
+
+## Ogródek przed i za domem: płotek, drzewka, donice, ścieżka do drzwi.
+func _suburban_garden(center: Vector3, d: int, lot: Vector2, house_depth: float) -> void:
+	var dir: Vector2i = DIRS[d]
+	var to_road := Vector3(dir.x, 0, dir.y)
+	var along := Vector3(-to_road.z, 0, to_road.x)
+	var rot: float = atan2(-float(dir.x), -float(dir.y))
+	if _rng.randf() < 0.7:
+		var p: Vector3 = center + along * (lot.x * 0.5 - 0.8) * (1 if _rng.randf() < 0.5 else -1) + to_road * (lot.y * 0.5 - 0.7)
+		_add(SUB % ("tree-large" if _rng.randf() < 0.5 else "tree-small"), Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 8.0), p))
+		_box_collider(p + Vector3(0, 1.5, 0), Vector3(0.5, 3.0, 0.5), 0.0)
+	if _rng.randf() < 0.5:
+		var p2: Vector3 = center - along * (lot.x * 0.5 - 1.2) * (1 if _rng.randf() < 0.5 else -1) + to_road * (lot.y * 0.5 - 0.5)
+		_add(SUB % "planter", Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * 4.0), p2))
+
+
+## Wnętrze kwartału zależnie od dzielnicy.
+func _place_yard(m: Vector2i, district: int) -> void:
+	var c: Vector3 = _center(m)
+	match district:
+		INDUSTRIAL:
+			_flat_box(c, Vector2(M, M), PAVING[INDUSTRIAL], 0.012)
+			var roll: float = _rng.randf()
+			if roll < 0.5:  # kontenery w rzędach
+				var rot: float = PI * 0.5 * _rng.randi_range(0, 1)
+				for k in _rng.randi_range(1, 3):
+					var off := Vector3(-2.6 + k * 2.6, 0, 0).rotated(Vector3.UP, rot)
+					var stack: int = _rng.randi_range(1, 2)
+					for level in stack:
+						var name: String = "shipping-container-" + ["a", "b", "c"][_rng.randi_range(0, 2)]
+						_add(IND % name, Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * 6.0), c + off + Vector3(0, level * 2.1, 0)))
+					_box_collider(c + off + Vector3(0, stack * 1.05, 0), Vector3(2.3, stack * 2.1, 5.0), rot)
+			elif roll < 0.8:
+				var name: String = ["detail-tank-large", "detail-tank", "water-tower"][_rng.randi_range(0, 2)]
+				var s: float = 5.0 if name == "detail-tank-large" else 6.0
+				_add(IND % name, Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s), c))
+				var b: AABB = _model_aabb(IND % name)
+				_box_collider(c + Vector3(0, b.size.y * s * 0.5, 0), Vector3(b.size.x, b.size.y, b.size.z) * s * 0.8, 0.0)
+			else:
+				_add(IND % "solar-panel-landscape-group", Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(Vector3.ONE * 5.0), c))
+		COMMERCIAL:
+			_flat_box(c, Vector2(M, M), PAVING[COMMERCIAL], 0.012)
+			if _rng.randf() < 0.5:  # ogródek kawiarni
+				for k in _rng.randi_range(2, 3):
+					var p: Vector3 = c + Vector3(_rng.randf_range(-3, 3), 0, _rng.randf_range(-3, 3))
+					_add(COM % ("detail-parasol-" + ["a", "b"][_rng.randi_range(0, 1)]), Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 6.0), p))
+			else:
+				for k in 2:
+					var p2: Vector3 = c + Vector3(_rng.randf_range(-3, 3), 0, _rng.randf_range(-3, 3))
+					_add(NATURE % TREES[_rng.randi_range(0, TREES.size() - 1)], Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * 1.4), p2))
+					_box_collider(p2 + Vector3(0, 1.5, 0), Vector3(0.6, 3.0, 0.6), 0.0)
+				_add(CITY % "bench", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * S_CITY), c))
+		_:
+			_place_park(m)
 
 
 func _place_park(m: Vector2i) -> void:
+
 	var c: Vector3 = _center(m)
 	var roll: float = _rng.randf()
 	if roll < 0.55:  # kępa drzew
@@ -479,70 +667,113 @@ func _build_bounds() -> void:
 		_box_collider(spec[0], spec[1], 0.0)
 
 
+# --- Horyzont ---------------------------------------------------------------------------
+
+## Za murem z budynków: dalsze "miasto" z prostych brył (Kenney low-detail), pasy lasu
+## i wzgórza na horyzoncie. Nic z tego nie ma kolizji (i tak nie da się tam dojść),
+## a mgła z perspektywą powietrzną łagodnie rozmywa kraniec świata.
+func _build_backdrop() -> void:
+	var lo: Vector2 = _center2(Vector2i(_amin, _bmin)) - Vector2(M, M) * 0.5
+	var hi: Vector2 = _center2(Vector2i(_amax, _bmax)) + Vector2(M, M) * 0.5
+	var center: Vector2 = (lo + hi) * 0.5
+	var half: Vector2 = (hi - lo) * 0.5
+	var lowdet: Array[String] = []
+	for c in "abcdefghijklm":
+		lowdet.append("low-detail-building-" + c)
+	# Trzy pierścienie bloków: gęsto przy murze, potem rzadziej i niżej, przetykane lasem.
+	for ring in 3:
+		var inner: float = 4.0 + ring * 55.0
+		var step: float = 13.0 + ring * 6.0
+		var density: float = [0.95, 0.6, 0.35][ring]
+		var x: float = lo.x - inner - 50.0
+		while x < hi.x + inner + 50.0:
+			var z: float = lo.y - inner - 50.0
+			while z < hi.y + inner + 50.0:
+				var p := Vector2(x, z)
+				var outside: float = maxf(absf(p.x - center.x) - half.x, absf(p.y - center.y) - half.y)
+				if outside > inner and outside < inner + 55.0:
+					var jitter := Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
+					var q: Vector2 = p + jitter
+					if _rng.randf() < density:
+						var name: String = lowdet[_rng.randi_range(0, lowdet.size() - 1)]
+						var s: float = _rng.randf_range(16.0, 22.0) * (1.0 - ring * 0.12)
+						var near_industry: bool = q.distance_to(_industry) < 260.0
+						_add(COM % name, Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(Vector3(s, s * (0.6 if near_industry else 1.0), s)), Vector3(q.x, 0, q.y)))
+					elif _rng.randf() < 0.7:
+						for k in 3:
+							var t: Vector2 = q + Vector2(_rng.randf_range(-5, 5), _rng.randf_range(-5, 5))
+							_add(NATURE % TREES[_rng.randi_range(0, TREES.size() - 1)],
+									Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(2.0, 3.2)), Vector3(t.x, 0, t.y)))
+				z += step
+			x += step
+	# Wzgórza na horyzoncie.
+	var hill_mat := StandardMaterial3D.new()
+	hill_mat.albedo_color = Color(0.36, 0.5, 0.36)
+	hill_mat.roughness = 1.0
+	for k in 22:
+		var a: float = TAU * k / 22.0 + _rng.randf_range(-0.1, 0.1)
+		var r: float = _rng.randf_range(650.0, 950.0)
+		var hill := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 1.0
+		sphere.height = 2.0
+		sphere.radial_segments = 16
+		sphere.rings = 8
+		sphere.material = hill_mat
+		hill.mesh = sphere
+		hill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		hill.scale = Vector3(_rng.randf_range(160, 260), _rng.randf_range(40, 110), _rng.randf_range(120, 200))
+		hill.rotation.y = a
+		hill.position = Vector3(center.x + cos(a) * r, -hill.scale.y * 0.35, center.y + sin(a) * r)
+		add_child(hill)
+
+
+## Mgła z perspektywą powietrzną i dopasowane niebo - kraniec mapy znika w oddali.
+func _apply_atmosphere() -> void:
+	var env_node: WorldEnvironment = null
+	for c in get_parent().get_children():
+		if c is WorldEnvironment:
+			env_node = c
+	if env_node == null or env_node.environment == null:
+		return
+	var env: Environment = env_node.environment
+	var haze := Color(0.74, 0.8, 0.86)
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	env.fog_light_color = haze
+	env.fog_density = 0.0028
+	env.fog_aerial_perspective = 0.55
+	env.fog_sky_affect = 0.25
+	if env.sky != null and env.sky.sky_material is ProceduralSkyMaterial:
+		var sky := env.sky.sky_material as ProceduralSkyMaterial
+		sky.sky_horizon_color = haze
+		sky.ground_horizon_color = haze
+		sky.ground_bottom_color = Color(0.5, 0.5, 0.48)  # neutralny: to światło odbija się na sufity
+
+
 # --- 5. Dom docelowy ------------------------------------------------------------------------
 
-func _build_target_house(house_m: Vector2i, yard_m: Vector2i, d: int) -> void:
+func _build_target_house(center: Vector3, d: int) -> void:
 	var dir: Vector2i = DIRS[d]
-	var rot: float = atan2(float(dir.x), float(dir.y))  # lokalne +Z = do ulicy
-	var root := Node3D.new()
-	root.name = "TargetHouse"
-	root.position = _center(house_m)
-	root.rotation.y = rot
-	add_child(root)
-	target_position = root.position
-
-	var W2: String = "res://assets/models/building/%s.glb"
-	var walls: Array = [  # [początek (lokalnie), oś, kafle]  dom 8 x 8 m
-		[Vector3(-4, 0, 4), "x", ["wall-window-square", "wall-doorway-wide-square", "wall-window-square"]],
-		[Vector3(-4, 0, -4), "x", ["wall", "wall-window-wide-square", "wall"]],
-		[Vector3(-4, 0, -4), "z", ["wall", "wall-window-square", "wall-window-square", "wall"]],
-		[Vector3(4, 0, -4), "z", ["wall", "wall-window-square", "wall-window-square", "wall"]],
-	]
-	var n: int = 0
-	for run: Array in walls:
-		var acc: float = 0.0
-		for tile: String in run[2]:
-			var length: float = 4.0 if tile.contains("wide") else 2.0
-			var prop := StaticProp.new()
-			prop.name = "Wall%d" % n
-			n += 1
-			prop.model = load(W2 % tile)
-			prop.model_scale = 1.0
-			if run[1] == "x":
-				prop.position = run[0] + Vector3(acc + length * 0.5, 0, 0)
-				prop.rotation.y = PI * 0.5
-			else:
-				prop.position = run[0] + Vector3(0, 0, acc + length * 0.5)
-			root.add_child(prop)
-			acc += length
-	var floor_mat := _mat(Color(0.72, 0.55, 0.4))
-	_local_box(root, Vector3(0, 0.01, 0), Vector3(8, 0.02, 8), floor_mat, false)                 # podłoga
-	_local_box(root, Vector3(0, 2.55, 0), Vector3(8.6, 0.25, 8.6), _mat(Color(0.62, 0.3, 0.25)), true)  # dach
-	_local_box(root, Vector3(0, 2.41, 0), Vector3(7.9, 0.02, 7.9), _mat(Color(0.95, 0.94, 0.9)), false)
-	for corner: Vector3 in [Vector3(-4, 1.2, -4), Vector3(4, 1.2, -4), Vector3(-4, 1.2, 4), Vector3(4, 1.2, 4)]:
-		_local_box(root, corner, Vector3(0.24, 2.4, 0.24), _mat(Color(0.93, 0.92, 0.95)), true)
-	var light := OmniLight3D.new()
-	light.position = Vector3(0, 2.1, 0)
-	light.omni_range = 7.0
-	light.light_energy = 1.3
-	light.light_color = Color(1, 0.9, 0.75)
-	root.add_child(light)
-
-	# Podwórko: utwardzony plac na auto + ścieżka do drzwi.
-	var yard: Vector3 = _center(yard_m)
-	_flat_box(yard, Vector2(8.8, 8.8), Color(0.62, 0.6, 0.57), 0.006)
-	var path_size := Vector2(4.2, 0.9) if d in [N, S] else Vector2(0.9, 4.2)  # ścieżka przed drzwiami
-	_flat_box(root.position + Basis(Vector3.UP, rot) * Vector3(0, 0, 4.4), path_size, Color(0.62, 0.6, 0.57), 0.006)
-	var label := Label3D.new()
-	label.text = "VAN PARKING"
-	label.pixel_size = 0.012
-	label.modulate = Color(1.0, 0.85, 0.2, 0.9)
-	label.rotation = Vector3(-PI / 2.0, rot, 0.0)
-	label.position = yard + Vector3(0, 0.02, 0)
-	add_child(label)
-
-	_build_beacon(root.position)
-	_build_target_items(root)
+	var house := TargetHouse.new()
+	house.name = "TargetHouse"
+	house.position = center
+	house.rotation.y = atan2(-float(dir.x), -float(dir.y))  # front domu (-Z) do ulicy
+	add_child(house)
+	house.build()
+	target_position = center
+	target_items = house.items
+	# Ścieżka od chodnika do drzwi, trawnik przed domem.
+	var to_road := Vector3(dir.x, 0, dir.y)
+	var path_size := Vector2(1.6, 1.2) if d in [N, S] else Vector2(1.2, 1.6)
+	_flat_box(center + to_road * 4.0, path_size, Color(0.66, 0.63, 0.58), 0.015)
+	_build_beacon(center)
+	# Host: przedmioty dodane w trakcie gry trzeba "pokazać" graczom, którzy już są na poziomie.
+	if multiplayer.is_server():
+		for item in target_items:
+			for id: int in Net.ready_peers:
+				if id != 1:
+					item.net_sync.set_visibility_for(id, true)
 
 
 ## Słup światła nad celem - widać go zza budynków z całego miasta.
@@ -560,7 +791,7 @@ func _build_beacon(at: Vector3) -> void:
 	cyl.material = mat
 	beam.mesh = cyl
 	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	beam.position = at + Vector3(0, 37.0, 0)
+	beam.position = at + Vector3(0, 41.0, 0)  # zaczyna się 6 m nad ziemią - nad dachem, nie w salonie
 	add_child(beam)
 	var label := Label3D.new()
 	label.text = "ZLECENIE"
@@ -573,46 +804,6 @@ func _build_beacon(at: Vector3) -> void:
 	label.modulate = Color(1.0, 0.78, 0.3)
 	label.position = at + Vector3(0, 6.0, 0)
 	add_child(label)
-
-
-func _build_target_items(root: Node3D) -> void:
-	var items := Node3D.new()
-	items.name = "Items"
-	root.add_child(items)
-	var scene: PackedScene = load("res://scenes/items/grabbable.tscn")
-	var F: String = "res://assets/models/furniture/%s.glb"
-	# [nazwa węzła, model, nazwa, masa, wartość, wytrzymałość, pozycja lokalna, obrót]
-	var table: Array = [
-		["Kanapa", "loungeSofa", "Kanapa", 40.0, 500.0, 120.0, Vector3(-1.8, 0.5, -3.2), 0.0],
-		["Fotel", "loungeChair", "Fotel", 15.0, 300.0, 100.0, Vector3(2.6, 0.5, -3.0), 0.0],
-		["Stolik", "tableCoffee", "Stolik kawowy", 10.0, 150.0, 100.0, Vector3(-1.8, 0.3, -1.6), 0.0],
-		["Lodowka", "kitchenFridge", "Lodówka", 60.0, 800.0, 80.0, Vector3(3.3, 0.95, 1.0), -PI * 0.5],
-		["Telewizor", "televisionModern", "Telewizor", 12.0, 600.0, 40.0, Vector3(0.5, 0.5, 2.5), PI],
-		["Lampa", "lampSquareFloor", "Lampa", 4.0, 120.0, 50.0, Vector3(-3.4, 0.9, 3.2), 0.0],
-		["Karton1", "cardboardBoxClosed", "Karton", 5.0, 80.0, 100.0, Vector3(-3.0, 0.35, 0.5), 0.0],
-		["Karton2", "cardboardBoxClosed", "Karton", 5.0, 80.0, 100.0, Vector3(-2.4, 0.35, 0.5), 0.0],
-		["Karton3", "cardboardBoxClosed", "Karton (szkło)", 5.0, 250.0, 25.0, Vector3(-2.7, 0.35, 1.2), 0.0],
-	]
-	for row: Array in table:
-		var item: Grabbable = scene.instantiate()
-		item.name = row[0]
-		item.model = load(F % row[1])
-		item.item_name = row[2]
-		item.mass = row[3]
-		item.value = row[4]
-		item.durability = row[5]
-		if row[0] == "Karton3":
-			item.label_text = "SZKŁO"
-		item.position = row[6]
-		item.rotation.y = row[7]
-		items.add_child(item)
-		target_items.append(item)
-	# Host: przedmioty dodane w trakcie gry trzeba "pokazać" graczom, którzy już są na poziomie.
-	if multiplayer.is_server():
-		for item in target_items:
-			for id: int in Net.ready_peers:
-				if id != 1:
-					item.net_sync.set_visibility_for(id, true)
 
 
 # --- Pomocnicze ---------------------------------------------------------------------------
@@ -665,9 +856,24 @@ func _flush_batches() -> void:
 			mmi.multimesh = mm
 			if mi.material_override != null:
 				mmi.material_override = mi.material_override
+			if path.contains("low-detail"):
+				mmi.material_override = _haze_material()  # dalekie miasto: matowe, w kolorze mgły
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
 		model.free()
 	_batches.clear()
+
+
+var _haze_mat: StandardMaterial3D
+
+
+func _haze_material() -> StandardMaterial3D:
+	if _haze_mat == null:
+		_haze_mat = StandardMaterial3D.new()
+		_haze_mat.albedo_color = Color(0.5, 0.56, 0.64)
+		_haze_mat.roughness = 1.0
+		_haze_mat.metallic_specular = 0.0
+	return _haze_mat
 
 
 var _aabb_cache: Dictionary = {}
