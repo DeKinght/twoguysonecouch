@@ -105,6 +105,7 @@ var _road_mask: Dictionary = {}  ## Vector2i(moduł drogi) -> maska wylotów
 var _batches: Dictionary = {}    ## ścieżka modelu -> Array[Transform3D]
 var _collision: StaticBody3D
 var _district: Dictionary = {}   ## Vector2i(moduł) -> dzielnica
+var _edge: CityEdge              ## port / obwodnica / wzgórza na krawędzi miasta
 var _recent: Dictionary = {}     ## pierzeja (ulica + strona) -> ostatnie modele [ścieżka|wariant]
 var _downtown: Vector2
 var _industry: Vector2
@@ -130,6 +131,8 @@ func generate(seed: int) -> void:
 	_mark_roads()
 	_mark_blocks()
 	_setup_districts()
+	_edge = CityEdge.new(self)
+	_edge.prepare()  # typy krawędzi + zamknięte wyloty ulic (przed budową dróg)
 	_pick_target()
 
 	_build_ground()
@@ -137,7 +140,7 @@ func generate(seed: int) -> void:
 	_build_blocks()
 	_build_hq_fence()
 	_build_bounds()
-	_build_backdrop()
+	_edge.build()
 	_flush_batches()
 	_apply_atmosphere()
 	generated.emit()
@@ -378,14 +381,14 @@ func _pick_target() -> void:
 
 # --- 4. Budowa ---------------------------------------------------------------------------
 
+## Ziemia tylko pod miastem - dookoła jest teren z CityEdge (wzgórza, woda, nabrzeże).
 func _build_ground() -> void:
-	var lo: Vector2 = HQ_CENTER - Vector2(1600, 1600)  # aż po horyzont (we mgle)
-	var hi: Vector2 = HQ_CENTER + Vector2(1600, 1600)
-	var size := Vector3(hi.x - lo.x, 1.0, hi.y - lo.y)
-	var center := Vector3((lo.x + hi.x) * 0.5, -0.5, (lo.y + hi.y) * 0.5)
+	var r: Rect2 = _city_rect()
+	var size := Vector3(r.size.x, 1.0, r.size.y)
+	var center := Vector3(r.get_center().x, -0.5, r.get_center().y)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = size
+	box.size = size + Vector3(4, 0, 4)
 	shape.shape = box
 	shape.position = center
 	_collision.add_child(shape)
@@ -429,7 +432,7 @@ func _build_roads() -> void:
 		var t := Transform3D(Basis(Vector3.UP, rot).scaled(Vector3(S_CITY, S_CITY * ROAD_FLAT, S_CITY)),
 				_center(m) + Vector3(0, y, 0))
 		_add(CITY % tile, t)
-		if tile == "road_straight":
+		if tile == "road_straight" and not _edge.stubs.has(m):
 			_decorate_straight(m, mask)
 
 
@@ -492,7 +495,7 @@ func _build_blocks() -> void:
 				else:
 					_place_lot(_center(m), d, 1, district, false, _street_key(m, d))
 			BOUNDARY:
-				_place_lot(_center(m), _face[m], 1, _district_of(m), true, _street_key(m, _face[m]))
+				_edge.build_module(m)
 			PARK:
 				_place_yard(m, _district_of(m))
 		used[m] = true
@@ -753,91 +756,7 @@ func _build_bounds() -> void:
 		_box_collider(spec[0], spec[1], 0.0)
 
 
-# --- Horyzont ---------------------------------------------------------------------------
-
-## Za murem z budynków: dalsze "miasto" z prostych brył (Kenney low-detail), pasy lasu
-## i wzgórza na horyzoncie. Nic z tego nie ma kolizji (i tak nie da się tam dojść),
-## a mgła z perspektywą powietrzną łagodnie rozmywa kraniec świata.
-func _build_backdrop() -> void:
-	var lo: Vector2 = _center2(Vector2i(_amin, _bmin)) - Vector2(M, M) * 0.5
-	var hi: Vector2 = _center2(Vector2i(_amax, _bmax)) + Vector2(M, M) * 0.5
-	var center: Vector2 = (lo + hi) * 0.5
-	var half: Vector2 = (hi - lo) * 0.5
-	var lowdet: Array[String] = []
-	for c in "abcdefghijklm":
-		lowdet.append("low-detail-building-" + c)
-	# Trzy pierścienie: tuż za murem prawdziwe budynki tej dzielnicy (we mgle), dalej proste bryły
-	# o wysokościach jak w mieście przed nimi - przedmieście nisko, śródmieście wyżej, przemysł średnio.
-	for ring in 3:
-		var inner: float = 4.0 + ring * 55.0
-		var step: float = 14.0 + ring * 6.0
-		var density: float = [0.85, 0.6, 0.4][ring]
-		var x: float = lo.x - inner - 50.0
-		while x < hi.x + inner + 50.0:
-			var z: float = lo.y - inner - 50.0
-			while z < hi.y + inner + 50.0:
-				var p := Vector2(x, z)
-				var outside: float = maxf(absf(p.x - center.x) - half.x, absf(p.y - center.y) - half.y)
-				if outside > inner and outside < inner + 55.0:
-					var q: Vector2 = p + Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
-					var district: int = _district_at(q)
-					var trees: float = [0.75, 0.35, 0.5][district]  # przedmieście: dużo zieleni
-					if _rng.randf() < density * (1.0 - trees * 0.5):
-						if ring == 0:
-							_backdrop_model(q, district)
-						else:
-							_backdrop_block(q, district, lowdet, ring)
-					elif _rng.randf() < 0.4 + trees * 0.5:
-						for k in 3:
-							var t: Vector2 = q + Vector2(_rng.randf_range(-5, 5), _rng.randf_range(-5, 5))
-							_add(NATURE % TREES[_rng.randi_range(0, TREES.size() - 1)],
-									Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * _rng.randf_range(1.6, 2.4)), Vector3(t.x, 0, t.y)))
-				z += step
-			x += step
-	# Wzgórza na horyzoncie.
-	var hill_mat := StandardMaterial3D.new()
-	hill_mat.albedo_color = Color(0.36, 0.5, 0.36)
-	hill_mat.roughness = 1.0
-	for k in 22:
-		var a: float = TAU * k / 22.0 + _rng.randf_range(-0.1, 0.1)
-		var r: float = _rng.randf_range(650.0, 950.0)
-		var hill := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 1.0
-		sphere.height = 2.0
-		sphere.radial_segments = 16
-		sphere.rings = 8
-		sphere.material = hill_mat
-		hill.mesh = sphere
-		hill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		hill.scale = Vector3(_rng.randf_range(160, 260), _rng.randf_range(40, 110), _rng.randf_range(120, 200))
-		hill.rotation.y = a
-		hill.position = Vector3(center.x + cos(a) * r, -hill.scale.y * 0.35, center.y + sin(a) * r)
-		add_child(hill)
-
-
-## Prawdziwy budynek dzielnicy w tle (bez kolizji - za murem i niewidzialną ścianą).
-func _backdrop_model(q: Vector2, district: int) -> void:
-	var choice: Array = _pick_model(district, Vector2(12.0, 12.0), false)
-	if choice.is_empty():
-		return
-	var rot: float = PI * 0.5 * _rng.randi_range(0, 3) + _rng.randf_range(-0.1, 0.1)
-	var box: AABB = _model_aabb(choice[0])
-	var c: Vector3 = Basis(Vector3.UP, rot) * (box.get_center() * choice[1])
-	_add(choice[0], Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * choice[1]), Vector3(q.x - c.x, 0.01, q.y - c.z)), choice[2])
-
-
-## Prosta bryła w kolorze mgły o wysokości typowej dla dzielnicy [m].
-func _backdrop_block(q: Vector2, district: int, lowdet: Array[String], ring: int) -> void:
-	var heights: Array = [[6.0, 10.0], [14.0, 34.0], [8.0, 16.0]]
-	var widths: Array = [[8.0, 11.0], [9.0, 13.0], [12.0, 18.0]]
-	var name: String = lowdet[_rng.randi_range(0, lowdet.size() - 1)]
-	var box: AABB = _model_aabb(COM % name)
-	var h: float = _rng.randf_range(heights[district][0], heights[district][1]) * (1.0 - ring * 0.1)
-	var w: float = _rng.randf_range(widths[district][0], widths[district][1])
-	var scale := Vector3(w / box.size.x, h / box.size.y, w / box.size.z * _rng.randf_range(0.7, 1.3))
-	_add(COM % name, Transform3D(Basis(Vector3.UP, PI * 0.5 * _rng.randi_range(0, 3)).scaled(scale), Vector3(q.x, 0, q.y)))
-
+# --- Horyzont: patrz CityEdge (port, obwodnica, wzgórza) -------------------------------
 
 ## Mgła z perspektywą powietrzną i dopasowane niebo - kraniec mapy znika w oddali.
 func _apply_atmosphere() -> void:
@@ -1017,6 +936,7 @@ func _flush_batches() -> void:
 				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			add_child(mmi)
 	_batches.clear()
+	_flush_merged()
 
 
 var _variant_mats: Dictionary = {}
@@ -1118,14 +1038,91 @@ func _mat(color: Color) -> StandardMaterial3D:
 	return _mat_cache[color]
 
 
+## Statyczne bryły nie są osobnymi węzłami: trafiają do zbiorczej siatki swojego kwadratu
+## (72 m) - jedno wywołanie rysowania na kwadrat zamiast setek. Kolor = kolor wierzchołków.
 func _visual_box(center: Vector3, size: Vector3, rot_y: float, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	bm.material = _mat(color)
-	mi.mesh = bm
-	mi.transform = Transform3D(Basis(Vector3.UP, rot_y), center)
-	add_child(mi)
+	_merge_box(Transform3D(Basis(Vector3.UP, rot_y), center), size, color)
+
+
+func _merge_box(t: Transform3D, size: Vector3, color: Color, shadow: bool = true) -> void:
+	var key := Vector3i(floori(t.origin.x / CHUNK), floori(t.origin.z / CHUNK), 1 if shadow else 0)
+	var acc: _MeshAcc = _merged.get(key)
+	if acc == null:
+		acc = _MeshAcc.new()
+		_merged[key] = acc
+	acc.box(t, size, color)
+
+
+## Belka między dwoma punktami (słupy, odciągi, liny).
+func _beam(a: Vector3, b: Vector3, thick: float, color: Color, shadow: bool = true) -> void:
+	var d: Vector3 = b - a
+	var length: float = d.length()
+	if length < 0.01:
+		return
+	var up: Vector3 = Vector3.RIGHT if absf(d.normalized().y) > 0.99 else Vector3.UP
+	_merge_box(Transform3D(Basis.looking_at(d / length, up), (a + b) * 0.5), Vector3(thick, thick, length), color, shadow)
+
+
+var _merged: Dictionary = {}
+var _merged_mat: StandardMaterial3D
+
+
+func _flush_merged() -> void:
+	if _merged_mat == null:
+		_merged_mat = StandardMaterial3D.new()
+		_merged_mat.vertex_color_use_as_albedo = true
+		_merged_mat.vertex_color_is_srgb = true
+		_merged_mat.roughness = 0.85
+	var keys: Array = _merged.keys()
+	keys.sort()
+	for key: Vector3i in keys:
+		var mesh: ArrayMesh = (_merged[key] as _MeshAcc).commit(_merged_mat)
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		if key.z == 0:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+	_merged.clear()
+
+
+class _MeshAcc:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	# [normalna, u, v] - u x v = normalna; wierzchołki zgodnie z ruchem wskazówek (front Godota).
+	const FACES: Array = [
+		[Vector3.RIGHT, Vector3.UP, Vector3.BACK], [Vector3.LEFT, Vector3.BACK, Vector3.UP],
+		[Vector3.UP, Vector3.BACK, Vector3.RIGHT], [Vector3.DOWN, Vector3.RIGHT, Vector3.BACK],
+		[Vector3.BACK, Vector3.RIGHT, Vector3.UP], [Vector3.FORWARD, Vector3.UP, Vector3.RIGHT],
+	]
+
+	func box(t: Transform3D, size: Vector3, color: Color) -> void:
+		var h: Vector3 = size * 0.5
+		for f: Array in FACES:
+			var n: Vector3 = f[0]
+			var u: Vector3 = (f[1] as Vector3) * h
+			var v: Vector3 = (f[2] as Vector3) * h
+			var c: Vector3 = n * h
+			var wn: Vector3 = (t.basis * n).normalized()
+			var base: int = verts.size()
+			for corner: Vector3 in [c - u - v, c - u + v, c + u + v, c + u - v]:
+				verts.append(t * corner)
+				norms.append(wn)
+				cols.append(color)
+			idx.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+
+	func commit(material: Material) -> ArrayMesh:
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = norms
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_INDEX] = idx
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(0, material)
+		return mesh
 
 
 func _flat_box(center: Vector3, size: Vector2, color: Color, top: float) -> void:
