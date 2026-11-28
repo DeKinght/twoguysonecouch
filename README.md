@@ -76,3 +76,16 @@ i parkingi; obrzeże zabudowane wysokimi budynkami + niewidzialne ściany. Kwart
 jest zawsze otoczony ulicami, wjazd do garażu łączy się z ulicą przy x = -14,5; wokół działki płot z przerwą
 na wjazd. Dom docelowy (z meblami do zabrania) w losowym kwartale >110 m od Siedziby, ze słupem światła
 i napisem "ZLECENIE". Modele rysowane przez MultiMesh (kilkadziesiąt węzłów zamiast tysięcy).
+
+### Dzielnice, horyzont, dom klienta
+- Każdy moduł miasta należy do dzielnicy: przedmieście (Kenney Suburban), śródmieście (Kenney Commercial + kamienice
+  KayKit) albo przemysł (Kenney Industrial). Śródmieście i przemysł mają losowe "centra" po przeciwnych stronach
+  Siedziby, a granice wyznacza płynny szum (`FastNoiseLite`) - przejścia są nieregularne i mieszane.
+  Działki jedno- lub dwumodułowe (większe domy, hale, biurowce), wnętrza kwartałów zależne od dzielnicy
+  (parki / ogródki kawiarni / place z kontenerami i zbiornikami), kominy przy halach.
+- Krawędź mapy: za pierścieniem budynków trzy pierścienie dalekiej zabudowy (Kenney low-detail, matowe, w kolorze
+  mgły) przetykane lasem, wzgórza na horyzoncie, mgła z perspektywą powietrzną i niebo w kolorze mgły.
+- Dom klienta (`scripts/levels/target_house.gd`): dom z Kenney Suburban (building-type-h) z wyciętym skrzydłem drzwi,
+  przezroczystymi szybami i wnętrzem: salon z aneksem kuchennym, sypialnia za ścianką działową, drzwi wejściowe
+  i do sypialni otwierane na E, lampy, 17 mebli do zabrania. Dom losuje się na przedmieściu.
+
